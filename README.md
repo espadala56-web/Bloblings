@@ -25,16 +25,17 @@ web/                 Yayına çıkan oyun (Cloudflare bu klasörü yayınlar)
 
 Derleme adımı yoktur: dosyalar olduğu gibi yayınlanır.
 
-## Cloudflare Pages kurulumu (bir kez)
+## Cloudflare kurulumu (bir kez)
 
-1. Cloudflare panelinde **Workers & Pages → Create → Pages → Connect to Git**.
-2. `espadala56-web/Bloblings` reposunu seç.
+1. Cloudflare panelinde **Compute → Workers & Pages → Create**.
+2. **Import a repository** ile GitHub'ı bağla ve `espadala56-web/Bloblings` reposunu seç.
 3. Ayarlar:
-   - Framework preset: **None**
+   - Project name: **bloblings**
    - Build command: **(boş bırak)**
-   - Build output directory: **web**
-4. **Save and Deploy**. Sana `https://bloblings.pages.dev` gibi bir adres verir.
+   - Deploy command: **npx wrangler deploy** (varsayılan)
+4. **Deploy**. Sana `https://bloblings.<hesap-adın>.workers.dev` gibi bir adres verir.
 
+Ayarlar repodaki `wrangler.jsonc` dosyasında: Cloudflare `web` klasörünü olduğu gibi yayınlar.
 Sonrasında `main` dalına gelen her değişiklik otomatik yayınlanır.
 
 ## Telegram'a bağlama

@@ -1,0 +1,8 @@
+// Cloudflare Workers ayarı: oyun statik dosyalardan oluşur, sunucu kodu yok.
+{
+  "name": "bloblings",
+  "compatibility_date": "2026-10-13",
+  "assets": {
+    "directory": "./web"
+  }
+}
