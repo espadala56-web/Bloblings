@@ -7,6 +7,7 @@ import { initTelegram, userLang, onHide, inTelegram, tgUserId, rawInitData } fro
 import { setLang, t } from './i18n.js';
 import { getPref } from './prefs.js';
 import { unlockAudio, suspendAudio } from './sound.js';
+import { preloadAds } from './ads.js';
 import { createUI } from './ui.js';
 import { createSync, httpTransport } from './net.js';
 
@@ -101,6 +102,7 @@ async function boot() {
 
   if (offline) setTimeout(() => ui.showWelcome(offline), 350);
   setTimeout(() => ui.maybeShowDaily(), 500);
+  setTimeout(preloadAds, 3000);
 
   // Test ve hata ayıklama için.
   window.__bloblings = { store, game, ui, net };

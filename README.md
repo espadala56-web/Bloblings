@@ -89,6 +89,7 @@ Sonra tarayıcıda `http://localhost:8080` aç. Telegram dışında da çalış�
 - [x] Enerji penceresi: reklamla +10 (günde 3) ya da kristalle +10
 - [x] Ses efektleri (Web Audio, dosya yok) ve ayarlar: ses, titreşim, dil
 - [ ] Füzyon ve hediye yumurtası (arkadaş daveti)
-- [ ] Adsgram ödüllü reklam (sunucu doğrulamalı)
+- [x] AdsGram ödüllü reklam (Enerji: 55668, 2x Kazanç: 55669)
+- [ ] Reklam ödülünü sunucuda doğrulama (AdsGram Reward URL, günde 50 bin+ oyuncuda açılıyor)
 - [ ] Telegram Stars mağazası ve Kâşif Pası
 - [ ] Görevler ve bildirimler

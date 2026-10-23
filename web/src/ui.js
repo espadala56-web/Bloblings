@@ -3,7 +3,7 @@
 import { CFG, ELEMENTS, ART, artKey } from './config.js';
 import { t, formatNum, formatDuration, formatClock, getLang, setLang, blobName, blobFlavor } from './i18n.js';
 import { haptic, setBackButton } from './telegram.js';
-import { showRewarded, ADS_LIVE } from './ads.js';
+import { showRewarded, adsDebug } from './ads.js';
 import { sfx } from './sound.js';
 import { getPref, setPref } from './prefs.js';
 
@@ -158,6 +158,12 @@ export function createUI(store) {
     sfx.error();
     haptic('error');
     toast(msg);
+  }
+
+  // Reklam izlenmediyse oyuncuya nedenini söyle; ödül verilmez.
+  function adFailed(r) {
+    if (r.reason === 'busy') return;
+    fail(r.reason === 'skipped' ? t('adSkipped') : t('adUnavailable'));
   }
 
   // ---- Yumurta ----
@@ -332,6 +338,7 @@ export function createUI(store) {
         const r = await showRewarded('energy');
         busy = false;
         if (!r.ok) {
+          adFailed(r);
           update();
           return;
         }
@@ -344,7 +351,7 @@ export function createUI(store) {
         sfx.energy();
         haptic('success');
         close();
-        toast(!ADS_LIVE && r.test ? `${t('energyAdded', { n: res.energy })} (test)` : t('energyAdded', { n: res.energy }));
+        toast(r.test ? `${t('energyAdded', { n: res.energy })} (test)` : t('energyAdded', { n: res.energy }));
       });
 
       crBtn.addEventListener('click', () => {
@@ -554,7 +561,7 @@ export function createUI(store) {
         switchRow(t('soundLabel'), 'sound', (on) => on && sfx.tap()),
         switchRow(t('hapticsLabel'), 'haptics', (on) => on && haptic('medium')),
         h('div', { class: 'set-row' }, [h('b', { text: t('langLabel') }), seg]),
-        h('span', { class: 'version', text: VERSION_LABEL, style: 'text-align:center' }),
+        h('span', { class: 'version', text: adsDebug() ? `${VERSION_LABEL} · ads debug` : VERSION_LABEL, style: 'text-align:center' }),
         h('button', { type: 'button', class: 'btn btn-ghost', text: t('close'), onclick: close }),
       ]);
     });
@@ -601,9 +608,16 @@ export function createUI(store) {
         dbl.disabled = true;
         one.disabled = true;
         const r = await showRewarded('offline_x2');
-        if (!ADS_LIVE && r.test) toast(t('adTest'));
-        const res = r.ok ? store.claimOfflineBonus() : { error: 'ad' };
+        if (!r.ok) {
+          // Reklam izlenmedi: pencere açık kalır, oyuncu tekrar deneyebilir ya da normal toplar.
+          dbl.disabled = false;
+          one.disabled = false;
+          adFailed(r);
+          return;
+        }
+        const res = store.claimOfflineBonus();
         finish(res.gold || 0);
+        if (r.test) setTimeout(() => toast(t('adTest')), 1800);
       });
       const card = h('div', { class: 'modal-card', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'welcome-title' }, [
         h('h2', { id: 'welcome-title', text: t('welcomeTitle') }),
