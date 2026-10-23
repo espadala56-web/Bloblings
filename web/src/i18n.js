@@ -1,6 +1,6 @@
 // Metinler. Oyuncu ayarlardan dil seçmediyse Telegram dili Türkçeyse Türkçe, değilse İngilizce.
 
-import { ART } from './config.js';
+import { artKey, topLevel } from './config.js';
 
 const STRINGS = {
   tr: {
@@ -79,6 +79,35 @@ const STRINGS = {
     needCrystals: '{n} kristal daha gerek.',
     settingsLabel: 'Ayarlar',
     durHM: '{h} sa {m} dk',
+    goldPerSec: 'altın/sn',
+    steam: 'Buhar',
+    lotus: 'Nilüfer',
+    autumn: 'Güz',
+    secretTab: 'Gizli',
+    albumShiny: '{n} parlak',
+    albumHowRecipe: 'Gizli tarif: Lv3 {a} ile Lv3 {b} canavarını üst üste bırak.',
+    albumShinyFound: 'Parlak hâli bulundu!',
+    secretRecipe: 'Gizli tarif!',
+    shinyTag: 'Parlak!',
+    shinyDesc: 'Parlak canavarlar 2 kat altın üretir. Birleştirince parlaklık kaybolmaz.',
+    recipeMeta: 'Lv3 {a} + Lv3 {b}',
+    hintRecipe: 'Sır: farklı elementlerden iki Lv3 canavarı üst üste bırakmayı dene…',
+    inviteLabel: 'Arkadaş davet et',
+    inviteTitle: 'Arkadaşını davet et',
+    inviteBody: 'Linkinle gelen arkadaşına hemen bir nadir yumurta hediye edilir. O {n} birleştirme yapınca sen de nadir yumurta ve {c} kristal kazanırsın.',
+    inviteCount: 'Davetinle gelen arkadaş: {n}',
+    inviteShare: "Telegram'da paylaş",
+    inviteCopy: 'Linki kopyala',
+    inviteCopied: 'Link kopyalandı!',
+    inviteNoUser: 'Davet linki yalnızca Telegram içinde çalışır.',
+    shareText: 'Bloblings oynuyorum: canavarları birleştirip ejderhaya dönüştürüyorum! Bu linkle gelirsen sana nadir yumurta hediye.',
+    giftInvitedTitle: 'Hoş geldin hediyesi!',
+    giftInvitedBody: '{name} seni Bloblings\'e davet etti ve sana bir nadir yumurta gönderdi.',
+    giftFriendTitle: 'Arkadaşından hediye!',
+    giftFriendBody: '{name} senin davetinle geldi ve {n} birleştirme yaptı. Ödülün: nadir yumurta ve {c} kristal!',
+    aFriend: 'Bir arkadaşın',
+    openGift: 'Yumurtayı aç',
+    crystalsAdded: '+{n} kristal!',
     fire: 'Ateş',
     water: 'Su',
     forest: 'Orman',
@@ -159,6 +188,35 @@ const STRINGS = {
     needCrystals: 'You need {n} more crystals.',
     settingsLabel: 'Settings',
     durHM: '{h}h {m}m',
+    goldPerSec: 'gold/s',
+    steam: 'Steam',
+    lotus: 'Lotus',
+    autumn: 'Autumn',
+    secretTab: 'Secret',
+    albumShiny: '{n} shiny',
+    albumHowRecipe: 'Secret recipe: drop a Lv3 {a} blob onto a Lv3 {b} blob.',
+    albumShinyFound: 'Shiny form found!',
+    secretRecipe: 'Secret recipe!',
+    shinyTag: 'Shiny!',
+    shinyDesc: 'Shiny blobs make 2x gold. Merging keeps the shine.',
+    recipeMeta: 'Lv3 {a} + Lv3 {b}',
+    hintRecipe: 'Psst: try dropping two Lv3 blobs of different elements onto each other…',
+    inviteLabel: 'Invite friends',
+    inviteTitle: 'Invite a friend',
+    inviteBody: 'Friends who join with your link get a rare egg right away. When they make {n} merges, you get a rare egg and {c} crystals too.',
+    inviteCount: 'Friends who joined: {n}',
+    inviteShare: 'Share on Telegram',
+    inviteCopy: 'Copy link',
+    inviteCopied: 'Link copied!',
+    inviteNoUser: 'Invite links only work inside Telegram.',
+    shareText: 'I am merging blobs into dragons in Bloblings! Join with this link and get a rare egg as a gift.',
+    giftInvitedTitle: 'Welcome gift!',
+    giftInvitedBody: '{name} invited you to Bloblings and sent you a rare egg.',
+    giftFriendTitle: 'A gift from a friend!',
+    giftFriendBody: '{name} joined with your link and made {n} merges. Your reward: a rare egg and {c} crystals!',
+    aFriend: 'A friend',
+    openGift: 'Open the egg',
+    crystalsAdded: '+{n} crystals!',
     fire: 'Fire',
     water: 'Water',
     forest: 'Forest',
@@ -170,13 +228,23 @@ const NAMES = {
     'fire-1': 'Kıvılcık', 'fire-2': 'Közcük', 'fire-3': 'Alevli', 'fire-4': 'Ejderçik', 'fire-5': 'Ejderha',
     'water-1': 'Damlacık', 'water-2': 'Dalgacık', 'water-3': 'Köpükçü', 'water-4': 'Dalgakral', 'water-5': 'Deniz Ejderi',
     'forest-1': 'Filiz', 'forest-2': 'Yapraklı', 'forest-3': 'Çiçekçi', 'forest-4': 'Kütükdev', 'forest-5': 'Orman Ruhu',
-    steamy: 'Buharcık',
+    'fire-6': 'Lavtaş', 'fire-7': 'Anka', 'fire-8': 'Güneşyele', 'fire-9': 'Ateş Cini', 'fire-10': 'Güneş Ejderi',
+    'water-6': 'Balonbalığı', 'water-7': 'Ahtapaşa', 'water-8': 'Buzboynuz', 'water-9': 'Denizatı Kral', 'water-10': 'Derin Hükümdar',
+    'forest-6': 'Mantar Bey', 'forest-7': 'Yosunayı', 'forest-8': 'Bilge Baykuş', 'forest-9': 'Sarmaşık Ejderi', 'forest-10': 'Dünya Kaplumbağası',
+    'steam-1': 'Buharcık', 'steam-2': 'Çaydanlık', 'steam-3': 'Şimşekbulut',
+    'lotus-1': 'Nilüfercik', 'lotus-2': 'Kurbağa Prens', 'lotus-3': 'Nilüfer Bilgesi',
+    'autumn-1': 'Güzcük', 'autumn-2': 'Balkabağı', 'autumn-3': 'Ateşböceği Kraliçesi',
   },
   en: {
     'fire-1': 'Sparky', 'fire-2': 'Ember', 'fire-3': 'Blaze', 'fire-4': 'Drakelet', 'fire-5': 'Dragon',
     'water-1': 'Droplet', 'water-2': 'Ripple', 'water-3': 'Bubbler', 'water-4': 'Tidelord', 'water-5': 'Leviathan',
     'forest-1': 'Sprout', 'forest-2': 'Leafy', 'forest-3': 'Blossom', 'forest-4': 'Oakheart', 'forest-5': 'Grovekeeper',
-    steamy: 'Steamy',
+    'fire-6': 'Magmite', 'fire-7': 'Phoenix', 'fire-8': 'Sunmane', 'fire-9': 'Flame Djinn', 'fire-10': 'Sun Wyrm',
+    'water-6': 'Puffball', 'water-7': 'Octoduke', 'water-8': 'Frosthorn', 'water-9': 'Seahorse King', 'water-10': 'Abyss Monarch',
+    'forest-6': 'Sir Shroom', 'forest-7': 'Mossbear', 'forest-8': 'Sage Owl', 'forest-9': 'Vine Wyrm', 'forest-10': 'World Turtle',
+    'steam-1': 'Steamy', 'steam-2': 'Teapotto', 'steam-3': 'Thunderhead',
+    'lotus-1': 'Lilybud', 'lotus-2': 'Frog Prince', 'lotus-3': 'Lotus Sage',
+    'autumn-1': 'Autumnling', 'autumn-2': 'Pumpkin Pal', 'autumn-3': 'Firefly Queen',
   },
 };
 
@@ -198,6 +266,30 @@ const FLAVOR = {
     'forest-3': 'Başındaki çiçeği kimseye vermez. Asla.',
     'forest-4': 'Yavaş yürür, sıkı sarılır.',
     'forest-5': 'Ormanın sırlarını boynuzlarında taşır.',
+    'fire-6': 'Kafasında küçük bir volkan taşır. Arada bir lav hapşırır.',
+    'fire-7': 'Küllerinden yeniden doğar. Ama önce biraz kestirir.',
+    'fire-8': 'Yelesini taradığında güneş doğar.',
+    'fire-9': 'Üç dilek hakkı verir. Üçü de sıcak çikolata hakkında.',
+    'fire-10': 'Ateş ailesinin kralı. Tacını kimseye ödünç vermez.',
+    'water-6': 'Şaşırınca şişer. Çok sık şaşırır.',
+    'water-7': 'Sekiz kolu var, sekizinde de çay bardağı.',
+    'water-8': 'Boynuzunda kar taneleri biriktirir.',
+    'water-9': 'Krallığı küçük ama çok düzenli.',
+    'water-10': 'Okyanusun en dibini feneriyle aydınlatır.',
+    'forest-6': 'Şapkasını asla çıkarmaz. Çıkaramaz da.',
+    'forest-7': 'Kış uykusundayken sırtında çiçekler açar.',
+    'forest-8': 'Her şeyi bilir. Gözlüğünü nereye koyduğu hariç.',
+    'forest-9': 'Ateş püskürmez, çiçek püskürür.',
+    'forest-10': 'Sırtındaki ağaçta koca bir orman yaşar.',
+    'steam-1': 'Ateşle suyun ilk buluşması. Biraz bulanık.',
+    'steam-2': 'Demlenmesi on beş dakika sürer. Sabırlı ol.',
+    'steam-3': 'Kızınca yağmur yağdırır, gülünce gökkuşağı çıkarır.',
+    'lotus-1': 'Yaprağını kimseyle paylaşmaz. Bir kurbağa hariç.',
+    'lotus-2': 'Öpücük beklemiyor. Sinek bekliyor.',
+    'lotus-3': 'Göl kadar sakin. Yanındaki herkes rahatlar.',
+    'autumn-1': 'Yapraklar döküldükçe dans eder.',
+    'autumn-2': 'İçi sıcacık, kalbi daha da sıcak.',
+    'autumn-3': 'Gece olunca bütün ormana yol gösterir.',
   },
   en: {
     'fire-1': 'Sneezes tiny sparks everywhere.',
@@ -215,6 +307,30 @@ const FLAVOR = {
     'forest-3': 'Will not share the flower. Ever.',
     'forest-4': 'Walks slowly, hugs firmly.',
     'forest-5': 'Carries the secrets of the forest in its antlers.',
+    'fire-6': 'Carries a tiny volcano on its head. Sneezes lava sometimes.',
+    'fire-7': 'Rises from its ashes. Right after a quick nap.',
+    'fire-8': 'When it brushes its mane, the sun comes up.',
+    'fire-9': 'Grants three wishes. All of them about hot cocoa.',
+    'fire-10': 'King of the fire family. Never lends out the crown.',
+    'water-6': 'Puffs up when surprised. Gets surprised a lot.',
+    'water-7': 'Eight arms, a teacup in every one.',
+    'water-8': 'Collects snowflakes on its horn.',
+    'water-9': 'A small kingdom, but a very tidy one.',
+    'water-10': 'Lights up the deepest ocean with its lantern.',
+    'forest-6': 'Never takes off the hat. Can not, actually.',
+    'forest-7': 'Flowers bloom on its back while it hibernates.',
+    'forest-8': 'Knows everything, except where it left its glasses.',
+    'forest-9': 'Does not breathe fire. Breathes flowers.',
+    'forest-10': 'A whole forest lives in the tree on its back.',
+    'steam-1': 'Where fire first met water. A little foggy.',
+    'steam-2': 'Takes fifteen minutes to brew. Be patient.',
+    'steam-3': 'Rains when grumpy, makes rainbows when happy.',
+    'lotus-1': 'Shares its lily pad with no one. Except a frog.',
+    'lotus-2': 'Not waiting for a kiss. Waiting for flies.',
+    'lotus-3': 'Calm as a lake. Everyone nearby relaxes.',
+    'autumn-1': 'Dances whenever the leaves fall.',
+    'autumn-2': 'Warm inside, even warmer heart.',
+    'autumn-3': 'Lights the way for the whole forest at night.',
   },
 };
 
@@ -240,22 +356,23 @@ export function t(key, vars = {}) {
 }
 
 export function blobName(el, lv) {
-  const top = ART[el] || 1;
-  const key = `${el}-${Math.min(lv, top)}`;
+  const top = topLevel(el);
+  const key = artKey(el, lv);
   const base = NAMES[lang][key] || NAMES.en[key] || el;
   // Çizimi olmayan yüksek seviyeler: en üst ismin yanına artı yazılır.
   return lv > top ? `${base} +${lv - top}` : base;
 }
 
 export function blobFlavor(el, lv) {
-  const key = `${el}-${Math.min(lv, ART[el] || 1)}`;
+  const key = artKey(el, lv);
   return FLAVOR[lang][key] || FLAVOR.en[key] || '';
 }
 
 export function formatNum(n) {
   const v = Math.floor(n);
   if (v < 10000) return v.toLocaleString(locale());
-  return new Intl.NumberFormat(locale(), { notation: 'compact', maximumFractionDigits: 1 }).format(v);
+  // 3 anlamlı basamak ve boşluksuz: 82,7B · 123Tn (dar ekranlarda üst çubuğa sığsın)
+  return new Intl.NumberFormat(locale(), { notation: 'compact', maximumSignificantDigits: 3 }).format(v).replace(/\s/g, '');
 }
 
 // Geri sayım: 1 saatten azsa 4:05, fazlaysa 5 sa 12 dk.

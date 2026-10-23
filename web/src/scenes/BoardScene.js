@@ -2,7 +2,8 @@
 // Koordinatlar tasarım boyutunun 2 katıdır (U = 2); Phaser ekrana sığdırırken küçültür,
 // böylece yüksek çözünürlüklü telefonlarda görüntü keskin kalır.
 
-import { CFG, ELEMENTS, ART, ELEMENT_COLOR, artKey } from '../config.js';
+import { CFG, ART, ELEMENT_COLOR, artKey } from '../config.js';
+import { goldCanvas } from '../gold.js';
 import { blobName, formatNum } from '../i18n.js';
 import { haptic } from '../telegram.js';
 import { sfx } from '../sound.js';
@@ -71,7 +72,7 @@ export class BoardScene extends P.Scene {
   }
 
   preload() {
-    for (const el of ELEMENTS) {
+    for (const el of Object.keys(ART)) {
       for (let lv = 1; lv <= ART[el]; lv++) {
         this.load.svg(`${el}-${lv}`, `./assets/blobs/${el}-${lv}.svg`, { width: 192, height: 192 });
       }
@@ -153,7 +154,47 @@ export class BoardScene extends P.Scene {
     g.lineStyle(1.6 * U, 0xc98a00, 1);
     g.strokeCircle(8 * U, 8 * U, 4 * U);
     g.generateTexture('coin', 16 * U, 16 * U);
+
+    // Parlak canavarların yıldızı
+    g.clear();
+    const S = 12 * U;
+    g.fillStyle(0xfff3b0, 1);
+    g.lineStyle(1.6 * U, COLORS.ink, 1);
+    const star = [];
+    for (let k = 0; k < 8; k++) {
+      const r = k % 2 === 0 ? S : S * 0.38;
+      const a = -Math.PI / 2 + (k * Math.PI) / 4;
+      star.push({ x: S + 2 * U + r * Math.cos(a), y: S + 2 * U + r * Math.sin(a) });
+    }
+    g.fillPoints(star, true);
+    g.strokePoints(star, true, true);
+    g.generateTexture('star', 2 * S + 4 * U, 2 * S + 4 * U);
     g.destroy();
+
+    // Parlak canavarların arkasındaki altın ışıltı
+    const R = 64 * U;
+    const glow = this.textures.createCanvas('glow', R, R);
+    const ctx = glow.getContext();
+    const grad = ctx.createRadialGradient(R / 2, R / 2, 0, R / 2, R / 2, R / 2);
+    grad.addColorStop(0, 'rgba(255,226,120,0.85)');
+    grad.addColorStop(0.55, 'rgba(255,201,60,0.35)');
+    grad.addColorStop(1, 'rgba(255,201,60,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, R, R);
+    glow.refresh();
+  }
+
+  // Bir çizimin altın kopyasını bir kez üretir, sonra hep onu kullanır.
+  goldKey(key) {
+    const gk = `${key}*`;
+    if (this.textures.exists(gk)) return gk;
+    const src = this.textures.get(key).getSourceImage();
+    const w = src.width || 192;
+    const h = src.height || 192;
+    const ct = this.textures.createCanvas(gk, w, h);
+    goldCanvas(src, w, h, ct.getSourceImage());
+    ct.refresh();
+    return gk;
   }
 
   // ---- Tahta çizimi ----
@@ -267,13 +308,22 @@ export class BoardScene extends P.Scene {
 
   createBlob(i, b) {
     const { x, y } = this.cellCenter(i);
-    const img = this.add.image(0, 0, artKey(b.el, b.lv)).setDisplaySize(BLOB, BLOB).setOrigin(0.5, 0.97).setDepth(10);
+    const key = b.shiny ? this.goldKey(artKey(b.el, b.lv)) : artKey(b.el, b.lv);
+    const img = this.add.image(0, 0, key).setDisplaySize(BLOB, BLOB).setOrigin(0.5, 0.97).setDepth(10);
     const badge = this.add.image(0, 0, 'badge').setDepth(11);
     const label = this.add
       .text(0, 0, `Lv${b.lv}`, { fontFamily: FONT, fontSize: `${11 * U}px`, fontStyle: 'bold', color: '#F5F1FF' })
       .setOrigin(0.5)
       .setDepth(12);
-    const o = { img, badge, label, cell: i, cx: x, cy: y, baseScale: img.scaleX, dragging: false, justDragged: false };
+    const o = { img, badge, label, fx: [], cell: i, cx: x, cy: y, baseScale: img.scaleX, dragging: false, justDragged: false };
+    if (b.shiny) {
+      const glow = this.add.image(0, 0, 'glow').setDepth(9).setDisplaySize(BLOB * 1.15, BLOB * 1.15).setAlpha(0.7);
+      const star = this.add.image(0, 0, 'star').setDepth(13);
+      this.tweens.add({ targets: glow, alpha: { from: 0.45, to: 0.95 }, duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      this.tweens.add({ targets: star, angle: 360, duration: 6000, repeat: -1 });
+      this.tweens.add({ targets: star, scale: { from: 0.8, to: 1.15 }, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      o.fx.push(glow, star);
+    }
     this.placeAt(o, x, y);
     img.setInteractive({ draggable: true, useHandCursor: true });
     img.setData('o', o);
@@ -293,12 +343,20 @@ export class BoardScene extends P.Scene {
     const by = y + TILE / 2 - BADGE_H / 2 - 5 * U;
     o.badge.setPosition(bx, by);
     o.label.setPosition(bx, by);
+    if (o.fx.length) {
+      o.fx[0].setPosition(x, y + IMG_DY - BLOB * 0.45);
+      o.fx[1].setPosition(x - TILE / 2 + 15 * U, y - TILE / 2 + 15 * U);
+    }
   }
 
   setDepths(o, base) {
     o.img.setDepth(base);
     o.badge.setDepth(base + 1);
     o.label.setDepth(base + 2);
+    if (o.fx.length) {
+      o.fx[0].setDepth(base - 1);
+      o.fx[1].setDepth(base + 3);
+    }
   }
 
   destroyBlob(o) {
@@ -307,6 +365,10 @@ export class BoardScene extends P.Scene {
     o.img.destroy();
     o.badge.destroy();
     o.label.destroy();
+    for (const f of o.fx) {
+      this.tweens.killTweensOf(f);
+      f.destroy();
+    }
   }
 
   // Hafif nefes alma: her canavar kendi ritminde.
@@ -379,7 +441,7 @@ export class BoardScene extends P.Scene {
     const g = this.highlight;
     g.clear();
     for (let j = 0; j < this.objs.length; j++) {
-      if (!this.store.canMerge(from, j)) continue;
+      if (!this.store.canMerge(from, j) && !this.store.knowsRecipe(from, j)) continue;
       const r = this.cellRect(j);
       if (j === hover) {
         g.fillStyle(COLORS.gold, 0.22);
@@ -459,11 +521,15 @@ export class BoardScene extends P.Scene {
       this.objs[to] = n;
       this.pop(n);
       const { x, y } = this.cellCenter(to);
-      this.sparks.explode(res.discovered ? 40 : 22, x, y);
-      this.floatText(x, y, blobName(res.blob.el, res.blob.lv), res.discovered ? '#FFC93C' : '#FFFFFF');
+      const big = res.discovered || res.recipe || res.shinyNew;
+      this.sparks.explode(big ? 40 : 22, x, y);
+      if (res.recipe) this.sparks.explode(30, x, y - 30 * U);
+      this.floatText(x, y, blobName(res.blob.el, res.blob.lv), big ? '#FFC93C' : '#FFFFFF');
       sfx.merge(res.blob.lv);
-      haptic(res.discovered ? 'heavy' : 'medium');
-      if (res.discovered) this.time.delayedCall(450, () => this.ui.discover(res.blob));
+      haptic(big ? 'heavy' : 'medium');
+      if (res.discovered || res.shinyNew) {
+        this.time.delayedCall(450, () => this.ui.discover(res.blob, { isNew: res.discovered, shinyNew: res.shinyNew, parents: res.parents }));
+      }
     }
     this.drawLinks();
     this.ui.refresh();
@@ -483,6 +549,7 @@ export class BoardScene extends P.Scene {
     o.img.setVisible(false);
     o.badge.setVisible(false);
     o.label.setVisible(false);
+    o.fx.forEach((f) => f.setVisible(false));
     o.img.disableInteractive();
 
     this.tweens.chain({
@@ -497,15 +564,16 @@ export class BoardScene extends P.Scene {
         o.img.setVisible(true);
         o.badge.setVisible(true);
         o.label.setVisible(true);
+        o.fx.forEach((f) => f.setVisible(true));
         o.img.setInteractive({ draggable: true, useHandCursor: true });
         this.pop(o);
         this.sparks.explode(14, x, y);
         this.drawLinks();
         sfx.hatch();
         haptic('medium');
-        if (res.discovered) {
+        if (res.discovered || res.shinyNew) {
           this.floatText(x, y, blobName(blob.el, blob.lv), '#FFC93C');
-          this.time.delayedCall(350, () => this.ui.discover(blob));
+          this.time.delayedCall(350, () => this.ui.discover(blob, { isNew: res.discovered, shinyNew: res.shinyNew }));
         }
       },
     });

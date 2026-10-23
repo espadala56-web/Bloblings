@@ -4,7 +4,7 @@
 // oyuncunun her hamlesi bir "eylem" olarak kaydedilir, sunucu bu eylemleri
 // kendi saatiyle tekrar oynatır ve sonucu doğrular.
 
-import { CFG, ELEMENTS, FED_BY, rateOf } from './config.js';
+import { CFG, ELEMENTS, FED_BY, rateOf, hybridOf, isHybrid, RECIPE_LV, HYBRID_START, HYBRID_MULT, SHINY_CHANCE, SHINY_CHANCE_RARE, SHINY_MULT } from './config.js';
 
 const VERSION = 3;
 let storageKey = 'bloblings:v1';
@@ -63,6 +63,8 @@ export function freshState(now, seed = newSeed()) {
     lastOffline: null,
     daily: { streak: 0, lastAt: 0 },
     ads: { day: '', energy: 0 },
+    inbox: [], // sunucunun koyduğu hediyeler: { id, kind: 'invited' | 'friend', name }
+    giftSeen: {}, // aynı hediye iki kez gelmesin
   };
 }
 
@@ -94,6 +96,8 @@ export function migrate(s, now = clockNow()) {
   if (!s.discovered) s.discovered = {};
   if (!s.daily) s.daily = { streak: 0, lastAt: 0 };
   if (!s.ads) s.ads = { day: '', energy: 0 };
+  if (!Array.isArray(s.inbox)) s.inbox = [];
+  if (!s.giftSeen || typeof s.giftSeen !== 'object') s.giftSeen = {};
   return s;
 }
 
@@ -185,6 +189,9 @@ export class Store extends EventTarget {
         break;
       case 'buyEnergy':
         res = this.buyEnergy(t);
+        break;
+      case 'gift':
+        res = this.claimGift(String((a && a.id) || ''), t);
         break;
       default:
         res = { error: 'unknown' };
@@ -299,24 +306,55 @@ export class Store extends EventTarget {
       out.gold = g;
     }
     if (r.rareEgg) {
-      const empty = this.emptyCells();
-      if (empty.length) {
-        const rr = rng(this.s.seed, this.s.stats.eggs);
-        const cell = empty[Math.floor(rr() * empty.length)];
-        const el = ELEMENTS[Math.floor(rr() * ELEMENTS.length)];
-        const blob = { el, lv: 2 + this.s.eggQuality };
-        this.s.board[cell] = blob;
-        this.s.stats.eggs += 1;
-        out.cell = cell;
-        out.blob = blob;
-        out.discovered = this.markDiscovered(blob);
-      } else {
+      const h = this.hatch(2 + this.s.eggQuality, SHINY_CHANCE_RARE);
+      if (h) Object.assign(out, h);
+      else {
         this.s.crystals += 60; // tahta doluysa yumurta yerine kristal
         out.crystals = 60;
       }
     }
     this.s.daily = { streak: day, lastAt: now };
     this.record({ type: 'daily', t: now });
+    this.emit('change');
+    return out;
+  }
+
+  // Boş bir yuvaya tohuma göre bir canavar çıkarır (yumurta, nadir yumurta, hediye).
+  // Sıra önemli: 1) yuva 2) element 3) parlak mı. Telefonda ve sunucuda aynı sonuç çıkar.
+  hatch(lv, shinyChance) {
+    const empty = this.emptyCells();
+    if (empty.length === 0) return null;
+    const r = rng(this.s.seed, this.s.stats.eggs);
+    const cell = empty[Math.floor(r() * empty.length)];
+    const el = ELEMENTS[Math.floor(r() * ELEMENTS.length)];
+    const blob = { el, lv };
+    if (r() < shinyChance) blob.shiny = true;
+    this.s.board[cell] = blob;
+    this.s.stats.eggs += 1;
+    const d = this.markDiscovered(blob);
+    return { cell, blob, discovered: d.isNew, shinyNew: d.shinyNew };
+  }
+
+  // ---- Hediye kutusu (arkadaş daveti) ----
+  claimGift(id, now = clockNow()) {
+    this.advance(now);
+    const i = this.s.inbox.findIndex((g) => g && g.id === id);
+    if (i < 0) return { error: 'none' };
+    const g = this.s.inbox[i];
+    this.s.inbox.splice(i, 1);
+    const out = { kind: g.kind, name: g.name || '' };
+    const h = this.hatch(2 + this.s.eggQuality, SHINY_CHANCE_RARE);
+    if (h) Object.assign(out, h);
+    let crystals = h ? 0 : 60;
+    if (g.kind === 'friend') {
+      crystals += CFG.giftCrystals;
+      this.s.stats.friends = (this.s.stats.friends || 0) + 1;
+    }
+    if (crystals) {
+      this.s.crystals += crystals;
+      out.crystals = crystals;
+    }
+    this.record({ type: 'gift', id, t: now });
     this.emit('change');
     return out;
   }
@@ -373,10 +411,10 @@ export class Store extends EventTarget {
   feedersOf(i) {
     const b = this.s.board[i];
     if (!b) return [];
-    const want = FED_BY[b.el];
+    const want = FED_BY[b.el] || [];
     return this.neighbors(i).filter((j) => {
       const n = this.s.board[j];
-      return n && n.el === want;
+      return n && want.includes(n.el);
     });
   }
 
@@ -392,7 +430,10 @@ export class Store extends EventTarget {
   blobRate(i) {
     const b = this.s.board[i];
     if (!b) return 0;
-    return rateOf(b.lv) * (1 + CFG.synergyBonus * this.feedersOf(i).length);
+    let r = rateOf(b.lv) * (1 + CFG.synergyBonus * this.feedersOf(i).length);
+    if (isHybrid(b.el)) r *= HYBRID_MULT;
+    if (b.shiny) r *= SHINY_MULT;
+    return r;
   }
 
   goldRate() {
@@ -461,17 +502,36 @@ export class Store extends EventTarget {
     return false;
   }
 
+  // İki canavar bir araya gelince ne olur: 'merge' (aynı), 'recipe' (gizli karışım) ya da null.
+  combineType(A, B) {
+    if (!A || !B) return null;
+    if (A.el === B.el && A.lv === B.lv) return 'merge';
+    if (A.lv === RECIPE_LV && B.lv === RECIPE_LV && hybridOf(A.el, B.el)) return 'recipe';
+    return null;
+  }
+
   canMerge(a, b) {
+    return a !== b && this.combineType(this.s.board[a], this.s.board[b]) === 'merge';
+  }
+
+  // Bu tarif daha önce keşfedildi mi (keşfedilmemiş tarifler tahtada ipucu olarak parlamaz).
+  knowsRecipe(a, b) {
     const A = this.s.board[a];
     const B = this.s.board[b];
-    return Boolean(a !== b && A && B && A.el === B.el && A.lv === B.lv);
+    if (a === b || this.combineType(A, B) !== 'recipe') return false;
+    return Boolean(this.s.discovered[`${hybridOf(A.el, B.el)}-${HYBRID_START}`]);
   }
 
   markDiscovered(blob) {
     const key = `${blob.el}-${blob.lv}`;
     const isNew = !this.s.discovered[key];
     this.s.discovered[key] = true;
-    return isNew;
+    let shinyNew = false;
+    if (blob.shiny) {
+      shinyNew = !this.s.discovered[`${key}*`];
+      this.s.discovered[`${key}*`] = true;
+    }
+    return { isNew, shinyNew };
   }
 
   // Sürükle-bırak: taşı, yer değiştir ya da birleştir.
@@ -486,12 +546,16 @@ export class Store extends EventTarget {
       board[to] = A;
       board[from] = null;
       res = { type: 'move' };
-    } else if (A.el === B.el && A.lv === B.lv) {
-      const merged = { el: A.el, lv: A.lv + 1 };
+    } else if (this.combineType(A, B)) {
+      const recipe = this.combineType(A, B) === 'recipe';
+      const merged = recipe ? { el: hybridOf(A.el, B.el), lv: HYBRID_START } : { el: A.el, lv: A.lv + 1 };
+      if (A.shiny || B.shiny) merged.shiny = true; // parlaklık birleşince kaybolmaz
       board[to] = merged;
       board[from] = null;
       this.s.stats.merges += 1;
-      res = { type: 'merge', blob: merged, discovered: this.markDiscovered(merged) };
+      if (recipe) this.s.stats.recipes = (this.s.stats.recipes || 0) + 1;
+      const d = this.markDiscovered(merged);
+      res = { type: 'merge', blob: merged, discovered: d.isNew, shinyNew: d.shinyNew, recipe, parents: recipe ? [A.el, B.el] : undefined };
     } else {
       board[to] = A;
       board[from] = B;
@@ -512,15 +576,9 @@ export class Store extends EventTarget {
     const wasFull = this.s.energy >= CFG.energyCap;
     this.s.energy -= CFG.eggCost;
     if (wasFull) this.s.energyAt = now; // dolum sayacı ilk harcamada başlar
-    const r = rng(this.s.seed, this.s.stats.eggs);
-    const cell = empty[Math.floor(r() * empty.length)];
-    const el = ELEMENTS[Math.floor(r() * ELEMENTS.length)];
-    const blob = { el, lv: 1 + this.s.eggQuality };
-    this.s.board[cell] = blob;
-    this.s.stats.eggs += 1;
-    const discovered = this.markDiscovered(blob);
+    const res = this.hatch(1 + this.s.eggQuality, SHINY_CHANCE);
     this.record({ type: 'egg', t: now });
     this.emit('change');
-    return { cell, blob, discovered };
+    return res;
   }
 }

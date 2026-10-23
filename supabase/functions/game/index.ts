@@ -14,6 +14,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { replay, loadOnServer, newPlayerState } from './rules/sync.js';
 import { newSeed } from './rules/store.js';
+import { CFG } from './rules/config.js';
 
 const BOT_ID = Deno.env.get('BOT_ID') ?? '8884399679';
 const BOT_TOKEN = Deno.env.get('TELEGRAM_BOT_TOKEN') ?? ''; // isteğe bağlı yedek doğrulama
@@ -144,31 +145,93 @@ function parseReferrer(startParam: string | null, selfId: number): number | null
   return id && id !== selfId ? id : null;
 }
 
+// ---- Arkadaş daveti ----
+
+type State = Record<string, any>;
+
+function shortName(name: unknown): string {
+  return typeof name === 'string' ? name.slice(0, 24) : '';
+}
+
+// Davet edilen oyuncu yeterince oynadıysa daveti "hak kazandı" olarak işaretler.
+// Durumdaki refDone bayrağı her senkronda veritabanına gitmemek için.
+function needsQualify(state: State, referredBy: number | null): boolean {
+  return Boolean(referredBy) && !state.refDone && (state.stats?.merges ?? 0) >= CFG.referralMerges;
+}
+
+async function markQualified(refereeId: number) {
+  await db.from('referrals').update({ qualified_at: new Date().toISOString() }).eq('referee', refereeId).is('qualified_at', null);
+  await logEvent(refereeId, 'referral_qualified');
+}
+
+// Hak kazanmış ama henüz teslim edilmemiş arkadaş hediyelerini durumun hediye kutusuna koyar.
+async function collectFriendGifts(tgId: number, state: State): Promise<number[]> {
+  const { data, error } = await db
+    .from('referrals')
+    .select('referee')
+    .eq('referrer', tgId)
+    .not('qualified_at', 'is', null)
+    .is('delivered_at', null)
+    .limit(20);
+  if (error || !data || data.length === 0) return [];
+  const ids = data.map((r: { referee: number }) => r.referee);
+  const { data: names } = await db.from('players').select('tg_id, first_name').in('tg_id', ids);
+  const nameOf = new Map((names ?? []).map((p: { tg_id: number; first_name: string | null }) => [p.tg_id, p.first_name]));
+  if (!Array.isArray(state.inbox)) state.inbox = [];
+  if (!state.giftSeen || typeof state.giftSeen !== 'object') state.giftSeen = {};
+  for (const id of ids) {
+    const gid = `f${id}`;
+    if (state.giftSeen[gid]) continue; // daha önce verildiyse tekrar verme
+    state.giftSeen[gid] = 1;
+    state.inbox.push({ id: gid, kind: 'friend', name: shortName(nameOf.get(id)) });
+  }
+  return ids;
+}
+
+async function markDelivered(ids: number[]) {
+  if (ids.length) await db.from('referrals').update({ delivered_at: new Date().toISOString() }).in('referee', ids);
+}
+
 async function load(user: TgUser, startParam: string | null, attempt = 0): Promise<Record<string, unknown>> {
   if (attempt > 2) return { error: 'busy' };
   const now = Date.now();
-  const { data: row, error } = await db.from('players').select('state, version').eq('tg_id', user.id).maybeSingle();
+  const { data: row, error } = await db.from('players').select('state, version, referred_by').eq('tg_id', user.id).maybeSingle();
   if (error) throw error;
 
   if (!row) {
-    const state = loadOnServer(newPlayerState(now, newSeed()), now);
+    const state = loadOnServer(newPlayerState(now, newSeed()), now) as State;
+    // Davet linkiyle geldiyse ve davet eden gerçek bir oyuncuysa: hoş geldin hediyesi.
+    let referrer: { tg_id: number; first_name: string | null } | null = null;
+    const refId = parseReferrer(startParam, user.id);
+    if (refId) {
+      const { data } = await db.from('players').select('tg_id, first_name').eq('tg_id', refId).maybeSingle();
+      referrer = data ?? null;
+    }
+    if (referrer) {
+      state.inbox.push({ id: 'inv', kind: 'invited', name: shortName(referrer.first_name) });
+      state.giftSeen.inv = 1;
+    }
     const ins = await db.from('players').insert({
       tg_id: user.id,
       ...profile(user),
       state,
       version: 1,
       start_param: startParam,
-      referred_by: parseReferrer(startParam, user.id),
+      referred_by: referrer ? referrer.tg_id : null,
     });
     if (ins.error) {
       if (ins.error.code === '23505') return load(user, startParam, attempt + 1); // aynı anda iki açılış
       throw ins.error;
     }
-    await logEvent(user.id, 'signup', { start_param: startParam });
+    if (referrer) await db.from('referrals').insert({ referee: user.id, referrer: referrer.tg_id });
+    await logEvent(user.id, 'signup', { start_param: startParam, referrer: referrer ? referrer.tg_id : null });
     return { state, serverNow: now, isNew: true };
   }
 
-  const state = loadOnServer(row.state, now);
+  const state = loadOnServer(row.state, now) as State;
+  const qualify = needsQualify(state, row.referred_by);
+  if (qualify) state.refDone = true;
+  const gifts = await collectFriendGifts(user.id, state);
   const upd = await db
     .from('players')
     .update({ state, version: row.version + 1, updated_at: new Date(now).toISOString(), ...profile(user) })
@@ -177,16 +240,20 @@ async function load(user: TgUser, startParam: string | null, attempt = 0): Promi
     .select('version');
   if (upd.error) throw upd.error;
   if (!upd.data || upd.data.length === 0) return load(user, startParam, attempt + 1); // başka bir cihaz yazdı, tekrar dene
+  await markDelivered(gifts);
+  if (qualify) await markQualified(user.id);
   return { state, serverNow: now, isNew: false };
 }
 
 async function sync(user: TgUser, actions: unknown, clientNow: unknown, attempt = 0): Promise<unknown> {
   const now = Date.now();
-  const { data: row, error } = await db.from('players').select('state, version').eq('tg_id', user.id).maybeSingle();
+  const { data: row, error } = await db.from('players').select('state, version, referred_by').eq('tg_id', user.id).maybeSingle();
   if (error) throw error;
   if (!row) return { error: 'no_player' };
 
   const res = replay(row.state, actions, now, clientNow);
+  const qualify = needsQualify(res.state as State, row.referred_by);
+  if (qualify) (res.state as State).refDone = true;
   const upd = await db
     .from('players')
     .update({ state: res.state, version: row.version + 1, updated_at: new Date(now).toISOString() })
@@ -198,6 +265,7 @@ async function sync(user: TgUser, actions: unknown, clientNow: unknown, attempt 
     if (attempt < 2) return sync(user, actions, clientNow, attempt + 1);
     return { error: 'busy' };
   }
+  if (qualify) await markQualified(user.id);
   if (res.rejected > 0) await logEvent(user.id, 'rejected', { rejected: res.rejected, applied: res.applied });
   return { state: res.state, serverNow: now, applied: res.applied, rejected: res.rejected };
 }

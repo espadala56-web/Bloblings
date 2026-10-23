@@ -81,6 +81,7 @@ html, body {
   color: var(--text); font-family: var(--font-display); font-weight: 600; font-size: 14px; cursor: pointer;
 }
 .chip-gift { padding: 0 9px; }
+.chip-invite { padding: 0 9px; background: var(--pink); border-color: var(--ink); }
 .chip .dot {
   position: absolute; top: -4px; right: -4px; width: 14px; height: 14px; border-radius: 50%;
   background: var(--pink); border: 2px solid var(--ink); display: none;
@@ -344,3 +345,47 @@ html, body {
 .btn .sub { font-family: var(--font-body); font-size: 12px; font-weight: 800; opacity: 0.85; }
 .btn-stack { flex-direction: column; gap: 0; line-height: 1.15; padding: 4px 8px; }
 .btn-stack > span:first-child { display: flex; align-items: center; gap: 6px; }
+
+/* Albüm sekmeleri ve gizli karışımlar */
+.album-tabs { display: flex; gap: 4px; background: var(--bg); border-radius: 12px; padding: 3px; width: 100%; }
+.album-tabs button { flex: 1; border: 0; border-radius: 9px; padding: 7px 2px; background: transparent; color: var(--muted); font-family: var(--font-body); font-weight: 800; font-size: 13px; cursor: pointer; }
+.album-tabs button[aria-selected='true'] { background: var(--panel); color: var(--text); box-shadow: inset 0 0 0 2px var(--edge); }
+.album-tabs button:focus-visible { outline: 3px solid var(--cyan); outline-offset: 1px; }
+.album-pane { width: 100%; display: flex; flex-direction: column; gap: 8px; }
+.album-grid.three { grid-template-columns: repeat(3, 1fr); }
+.album-cell.secret { color: #6b6399; font-family: var(--font-display); font-weight: 700; font-size: 26px; }
+.album-cell.has-shiny { border-color: #ffc93c66; }
+.album-cell .shine { position: absolute; top: 3px; left: 6px; color: var(--gold); font-size: 12px; line-height: 1; }
+.album-meta-row { display: flex; justify-content: center; gap: 12px; }
+.album-meta-row .gold { color: var(--gold); }
+.recipe-row > span { display: flex; justify-content: space-between; }
+.recipe-row > span small { color: var(--muted); font-weight: 800; font-size: 11px; }
+
+/* Keşif kartı: gizli tarif ve parlak */
+.discover .tag.recipe { background: linear-gradient(90deg, var(--gold), var(--pink)); }
+.discover .tag.shiny { background: var(--gold); }
+.discover-img.is-gold { filter: drop-shadow(0 0 14px rgba(255, 201, 60, 0.55)); }
+
+/* Davet ve hediye */
+.invite-hero { display: flex; align-items: flex-end; justify-content: center; gap: 4px; }
+.invite-hero img { width: 64px; height: 64px; }
+.invite-hero img.egg { width: 76px; height: 76px; }
+.invite-link { width: 100%; font: 700 12px var(--font-body); color: var(--muted); background: var(--bg); border: 1px solid var(--edge); border-radius: 10px; padding: 8px 10px; text-align: center; -webkit-user-select: text; user-select: text; }
+.gift-egg { width: 120px; height: 120px; }
+@media (prefers-reduced-motion: no-preference) {
+  .gift-egg { animation: wobble 1.4s ease-in-out infinite; }
+  @keyframes wobble { 0%, 60%, 100% { transform: rotate(0); } 70% { transform: rotate(-8deg); } 80% { transform: rotate(8deg); } 90% { transform: rotate(-4deg); } }
+}
+
+/* Dar telefonlar (360px ve altı): üst çubuk tek satıra sığsın */
+@media (max-width: 380px) {
+  .hud { gap: 6px; padding: 4px 12px 8px; }
+  .subbar { padding: 0 12px 8px; gap: 6px; }
+  .pill { padding: 4px 9px 4px 5px; font-size: 15px; gap: 5px; }
+  .pill-btn { padding-right: 6px; }
+  .ico { width: 24px; height: 24px; }
+  .icon-btn { width: 36px; height: 36px; }
+  .pill .plus { width: 16px; height: 16px; line-height: 16px; font-size: 13px; }
+  .pill { min-width: 0; }
+  .pill b { white-space: nowrap; }
+}

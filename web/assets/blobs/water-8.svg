@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+<path d="M46 42L32 2L62 38Z" fill="#F2FBFF" stroke="#1A1430" stroke-width="4.5" stroke-linejoin="round"/>
+<path d="M36 12l7 0M38 20l10 1M41 28l13 2" stroke="#7FB8F0" stroke-width="3" stroke-linecap="round"/>
+<path d="M96 84Q110 74 114 60Q104 62 100 70Q102 58 94 50Q92 64 92 76Z" fill="#7FB8F0" stroke="#1A1430" stroke-width="4.5" stroke-linejoin="round"/>
+<ellipse cx="44" cy="109" rx="10" ry="5.5" fill="#5A93D8" stroke="#1A1430" stroke-width="3.5"/>
+<ellipse cx="76" cy="109" rx="10" ry="5.5" fill="#5A93D8" stroke="#1A1430" stroke-width="3.5"/>
+<ellipse cx="60" cy="74" rx="40" ry="34" fill="#7FB8F0" stroke="#1A1430" stroke-width="5"/>
+<path d="M24 86Q60 118 96 86Q90 106 60 107Q30 106 24 86Z" fill="#E6F4FF"/>
+<circle cx="36" cy="58" r="3.4" fill="#5A93D8"/><circle cx="84" cy="54" r="4" fill="#5A93D8"/><circle cx="90" cy="68" r="2.6" fill="#5A93D8"/><circle cx="28" cy="72" r="2.6" fill="#5A93D8"/><circle cx="74" cy="44" r="2.6" fill="#5A93D8"/>
+<path d="M20 82Q8 86 8 98Q16 96 22 92Z" fill="#5A93D8" stroke="#1A1430" stroke-width="3.5" stroke-linejoin="round"/>
+<ellipse cx="47" cy="70" rx="8.5" ry="10" fill="#fff" stroke="#1A1430" stroke-width="3.5"/>
+<ellipse cx="73" cy="70" rx="8.5" ry="10" fill="#fff" stroke="#1A1430" stroke-width="3.5"/>
+<circle cx="48.5" cy="72" r="4.8" fill="#1A1430"/>
+<circle cx="74.5" cy="72" r="4.8" fill="#1A1430"/>
+<circle cx="46.5" cy="69" r="1.7" fill="#fff"/>
+<circle cx="72.5" cy="69" r="1.7" fill="#fff"/>
+<ellipse cx="35" cy="83" rx="6" ry="3.6" fill="#FF4F7B" opacity="0.5"/>
+<ellipse cx="85" cy="83" rx="6" ry="3.6" fill="#FF4F7B" opacity="0.5"/>
+<path d="M54 85q6 6 12 0" fill="none" stroke="#1A1430" stroke-width="3.5" stroke-linecap="round"/>
+<path d="M100 18.0l1.88 2.12l2.12 1.88l-2.12 1.88l-1.88 2.12l-1.88 -2.12l-2.12 -1.88l2.12 -1.88z" fill="#D7F1FF"/>
+<path d="M110 33.4l1.222 1.3780000000000001l1.3780000000000001 1.222l-1.3780000000000001 1.222l-1.222 1.3780000000000001l-1.222 -1.3780000000000001l-1.3780000000000001 -1.222l1.3780000000000001 -1.222z" fill="#D7F1FF"/>
+<path d="M16 37.0l1.41 1.59l1.59 1.41l-1.59 1.41l-1.41 1.59l-1.41 -1.59l-1.59 -1.41l1.59 -1.41z" fill="#D7F1FF"/>
+</svg>

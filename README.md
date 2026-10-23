@@ -88,8 +88,16 @@ Sonra tarayıcıda `http://localhost:8080` aç. Telegram dışında da çalış�
 - [x] Günlük giriş serisi: 7 günlük takvim, 7. gün nadir yumurta
 - [x] Enerji penceresi: reklamla +10 (günde 3) ya da kristalle +10
 - [x] Ses efektleri (Web Audio, dosya yok) ve ayarlar: ses, titreşim, dil
-- [ ] Füzyon ve hediye yumurtası (arkadaş daveti)
+- [x] Her elementte 10 seviye: Lavtaş, Anka, Güneşyele, Ateş Cini, Güneş Ejderi; Balonbalığı, Ahtapaşa, Buzboynuz, Denizatı Kral, Derin Hükümdar; Mantar Bey, Yosunayı, Bilge Baykuş, Sarmaşık Ejderi, Dünya Kaplumbağası
+- [x] Gizli karışımlar: Lv3 Ateş + Lv3 Su = Buhar, Su + Orman = Nilüfer, Orman + Ateş = Güz (x1.5 gelir)
+- [x] Parlak (altın) canavarlar: yumurtadan %3, nadir yumurtadan %10 ihtimal, x2 gelir
+- [x] Arkadaş daveti: gelen arkadaşa nadir yumurta, 10 birleştirme yapınca davet edene nadir yumurta + 20 kristal
 - [x] AdsGram ödüllü reklam (Enerji: 55668, 2x Kazanç: 55669)
 - [ ] Reklam ödülünü sunucuda doğrulama (AdsGram Reward URL, günde 50 bin+ oyuncuda açılıyor)
 - [ ] Telegram Stars mağazası ve Kâşif Pası
 - [ ] Görevler ve bildirimler
+
+## Çizimler
+
+Canavarlar `tools/art_*.py` betikleriyle SVG olarak üretilir (`python3 tools/art_fire.py` gibi).
+Hepsi aynı göz, yanak ve ağız yardımcılarını (`tools/art_common.py`) kullanır.

@@ -33,7 +33,8 @@ export function replay(state, actions, serverNow, clientNow) {
     if (!Number.isFinite(t)) t = last;
     t = Math.min(Math.max(t, last), serverNow + MAX_SKEW_MS); // zaman geri gidemez, geleceğe kaçamaz
     last = t;
-    const res = st.apply({ type: a.type, from: a.from, to: a.to, seq: a.seq, t });
+    const id = typeof a.id === 'string' ? a.id.slice(0, 40) : undefined;
+    const res = st.apply({ type: a.type, from: a.from, to: a.to, id, seq: a.seq, t });
     if (!res || res.error || res.type === 'none') rejected += 1;
     else applied += 1;
   }

@@ -1,8 +1,9 @@
 // HTML arayüz katmanı: üst bilgi çubuğu, ipucu, butonlar, bildirimler ve pencereler.
 
-import { CFG, ELEMENTS, ART, artKey } from './config.js';
+import { CFG, ELEMENTS, ART, artKey, HYBRIDS, HYBRID_LIST, HYBRID_START, RECIPE_LV, isHybrid } from './config.js';
 import { t, formatNum, formatDuration, formatClock, getLang, setLang, blobName, blobFlavor } from './i18n.js';
-import { haptic, setBackButton } from './telegram.js';
+import { haptic, setBackButton, inviteLink, shareLink, copyText, tgUserId } from './telegram.js';
+import { makeGold } from './gold.js';
 import { showRewarded, adsDebug } from './ads.js';
 import { sfx } from './sound.js';
 import { getPref, setPref } from './prefs.js';
@@ -37,7 +38,14 @@ function h(tag, attrs = {}, children = []) {
   return node;
 }
 
-const ALBUM_TOTAL = ELEMENTS.reduce((n, el) => n + ART[el], 0);
+// Albümdeki her canavar: temel elementlerde Lv1-10, gizli karışımlarda Lv4-6.
+function albumLevels(el) {
+  if (isHybrid(el)) return Array.from({ length: ART[el] }, (_, i) => HYBRID_START + i);
+  return Array.from({ length: ART[el] }, (_, i) => i + 1);
+}
+const ALBUM_ELS = [...ELEMENTS, ...HYBRID_LIST];
+const ALBUM_TOTAL = ALBUM_ELS.reduce((n, el) => n + ART[el], 0);
+const ELEMENT_CSS = { fire: '#FF9A6B', water: '#7CC8FF', forest: '#7FDB88', steam: '#C7B3FF', lotus: '#6FE0D0', autumn: '#FFB86B' };
 
 export function createUI(store) {
   const el = {
@@ -50,6 +58,7 @@ export function createUI(store) {
     albumBtn: $('album-btn'),
     albumVal: $('album-val'),
     dailyBtn: $('daily-btn'),
+    inviteBtn: $('invite-btn'),
     settingsBtn: $('settings-btn'),
     hint: $('hint'),
     eggBtn: $('egg-btn'),
@@ -121,13 +130,25 @@ export function createUI(store) {
     if (s.energy < CFG.eggCost && empty > 0) return t('hintNoEnergy');
     if (s.stats.eggs === 0 && empty > 0) return t('hintOpenEgg');
     if (s.stats.merges >= 1 && store.synergyLinks().length === 0) return t('hintSynergy');
+    if (!s.stats.recipes && hasRecipePair()) return t('hintRecipe');
     return t('hintKeepMerging');
+  }
+
+  // Tahtada farklı elementlerden iki Lv3 var mı (gizli tarif ipucu için).
+  function hasRecipePair() {
+    const els = new Set();
+    for (const b of store.s.board) if (b && b.lv === RECIPE_LV && ELEMENTS.includes(b.el)) els.add(b.el);
+    return els.size >= 2;
   }
 
   function albumCount() {
     let n = 0;
-    for (const e of ELEMENTS) for (let lv = 1; lv <= ART[e]; lv++) if (store.s.discovered[`${e}-${lv}`]) n++;
+    for (const e of ALBUM_ELS) for (const lv of albumLevels(e)) if (store.s.discovered[`${e}-${lv}`]) n++;
     return n;
+  }
+
+  function shinyCount() {
+    return Object.keys(store.s.discovered).filter((k) => k.endsWith('*')).length;
   }
 
   function refresh() {
@@ -137,7 +158,7 @@ export function createUI(store) {
     el.energyPill.classList.toggle('low', s.energy < 5);
     el.goldVal.textContent = formatNum(s.gold);
     el.crystalVal.textContent = formatNum(s.crystals);
-    el.rateVal.textContent = `+${formatRate(store.goldRate())} ${t('goldUnit')}`;
+    el.rateVal.textContent = `+${formatRate(store.goldRate())} ${t('goldPerSec')}`;
     el.albumVal.textContent = `${albumCount()}/${ALBUM_TOTAL}`;
     el.dailyBtn.classList.toggle('has-dot', store.dailyStatus().ready);
     const hint = hintText();
@@ -145,6 +166,8 @@ export function createUI(store) {
     el.eggBtn.classList.toggle('is-empty', s.energy < CFG.eggCost);
     el.upBtn.classList.toggle('has-dot', store.canAffordUpgrade());
     if (current && current.update) current.update();
+    // Sunucudan hediye geldiyse (ve ekranda başka pencere yoksa) göster.
+    if (scene && !current && !queue.length && store.s.inbox && store.s.inbox.length) openGift(store.s.inbox[0]);
   }
 
   function toast(msg, ms = 2200) {
@@ -444,7 +467,7 @@ export function createUI(store) {
         haptic('success');
         close();
         toast(t('dailyGot', { n: res.day }));
-        if (res.blob && scene) scene.spawn({ cell: res.cell, blob: res.blob, discovered: res.discovered });
+        if (res.blob && scene) scene.spawn({ cell: res.cell, blob: res.blob, discovered: res.discovered, shinyNew: res.shinyNew });
         refresh();
       });
 
@@ -468,50 +491,113 @@ export function createUI(store) {
   });
 
   // ---- Albüm ----
+  let albumTab = 'fire';
+
+  function albumImg(e, lv, gold) {
+    const img = h('img', { src: `./assets/blobs/${artKey(e, lv)}.svg`, alt: '', draggable: 'false' });
+    return gold ? makeGold(img) : img;
+  }
+
   function openAlbum() {
     openModal((close) => {
       const n = albumCount();
       const detail = h('div', { class: 'album-detail' }, [h('p', { class: 'small-note', text: t('albumTap') })]);
+      const pane = h('div', { class: 'album-pane' });
+      const tabs = h('div', { class: 'album-tabs', role: 'tablist' });
       const cells = [];
-      const rows = ELEMENTS.map((e) => {
-        const grid = h('div', { class: 'album-grid' });
-        for (let lv = 1; lv <= ART[e]; lv++) {
-          const known = Boolean(store.s.discovered[`${e}-${lv}`]);
-          const cell = h('button', { type: 'button', class: `album-cell${known ? '' : ' locked'}`, 'aria-label': known ? blobName(e, lv) : t('albumLocked') }, [
-            h('img', { src: `./assets/blobs/${artKey(e, lv)}.svg`, alt: '', draggable: 'false' }),
-            h('small', { text: String(lv) }),
-          ]);
-          cell.addEventListener('click', () => {
-            sfx.tap();
-            cells.forEach((c) => c.classList.remove('sel'));
-            cell.classList.add('sel');
-            detail.innerHTML = '';
-            if (known) {
-              detail.append(
-                h('b', { text: blobName(e, lv) }),
-                h('span', { class: 'meta', text: `Lv${lv} · ${t(e)}` }),
-                h('p', { text: blobFlavor(e, lv) }),
-              );
-            } else {
-              detail.append(
-                h('b', { text: '???' }),
-                h('span', { class: 'meta', text: `Lv${lv} · ${t(e)} · ${t('albumLocked')}` }),
-                h('p', { text: lv === 1 ? t('albumHowEgg') : t('albumHowMerge', { n: lv - 1, el: t(e) }) }),
-              );
-            }
-          });
-          cells.push(cell);
-          grid.append(cell);
+
+      function showDetail(e, lv) {
+        const d = store.s.discovered;
+        const known = Boolean(d[`${e}-${lv}`]);
+        detail.innerHTML = '';
+        if (known) {
+          detail.append(
+            h('b', { text: blobName(e, lv) }),
+            h('span', { class: 'meta', text: `Lv${lv} · ${t(e)}` }),
+            h('p', { text: blobFlavor(e, lv) }),
+          );
+          if (d[`${e}-${lv}*`]) detail.append(h('span', { class: 'meta', text: `✦ ${t('albumShinyFound')}`, style: 'color:#FFC93C' }));
+          return;
         }
-        const color = { fire: '#FF9A6B', water: '#7CC8FF', forest: '#7FDB88' }[e];
-        return h('div', { class: 'album-row' }, [h('span', { text: t(e), style: `color:${color}` }), grid]);
-      });
+        let how;
+        if (isHybrid(e)) {
+          const [a, b] = HYBRIDS[e];
+          how = lv === HYBRID_START ? t('albumHowRecipe', { a: t(a), b: t(b) }) : t('albumHowMerge', { n: lv - 1, el: knownHybrid(e) ? t(e) : '???' });
+        } else {
+          how = lv === 1 ? t('albumHowEgg') : t('albumHowMerge', { n: lv - 1, el: t(e) });
+        }
+        detail.append(
+          h('b', { text: '???' }),
+          h('span', { class: 'meta', text: `Lv${lv} · ${isHybrid(e) && !knownHybrid(e) ? '???' : t(e)} · ${t('albumLocked')}` }),
+          h('p', { text: how }),
+        );
+      }
+
+      function cell(e, lv) {
+        const d = store.s.discovered;
+        const known = Boolean(d[`${e}-${lv}`]);
+        const shiny = Boolean(d[`${e}-${lv}*`]);
+        const secret = isHybrid(e) && !known;
+        const cls = ['album-cell', known ? '' : 'locked', secret ? 'secret' : '', shiny ? 'has-shiny' : ''].filter(Boolean).join(' ');
+        const btn = h('button', { type: 'button', class: cls, 'aria-label': known ? blobName(e, lv) : t('albumLocked') }, secret ? [h('span', { text: '?' })] : [albumImg(e, lv, false), h('small', { text: String(lv) })]);
+        if (shiny) btn.append(h('span', { class: 'shine', text: '✦', 'aria-hidden': 'true' }));
+        btn.addEventListener('click', () => {
+          sfx.tap();
+          cells.forEach((c) => c.classList.remove('sel'));
+          btn.classList.add('sel');
+          showDetail(e, lv);
+        });
+        cells.push(btn);
+        return btn;
+      }
+
+      function knownHybrid(e) {
+        return albumLevels(e).some((lv) => store.s.discovered[`${e}-${lv}`]);
+      }
+
+      function paintPane() {
+        pane.innerHTML = '';
+        cells.length = 0;
+        detail.innerHTML = '';
+        detail.append(h('p', { class: 'small-note', text: t('albumTap') }));
+        if (albumTab === 'secret') {
+          for (const e of HYBRID_LIST) {
+            const [a, b] = HYBRIDS[e];
+            const grid = h('div', { class: 'album-grid three' }, albumLevels(e).map((lv) => cell(e, lv)));
+            const label = h('span', { style: `color:${ELEMENT_CSS[e]}` }, [document.createTextNode(knownHybrid(e) ? t(e) : '???'), h('small', { text: `${t(a)} + ${t(b)}` })]);
+            pane.append(h('div', { class: 'album-row recipe-row' }, [label, grid]));
+          }
+        } else {
+          const e = albumTab;
+          pane.append(h('div', { class: 'album-grid' }, albumLevels(e).map((lv) => cell(e, lv))));
+        }
+        for (const b of tabs.children) b.setAttribute('aria-selected', String(b.dataset.tab === albumTab));
+      }
+
+      for (const tab of [...ELEMENTS, 'secret']) {
+        const label = tab === 'secret' ? `✦ ${t('secretTab')}` : t(tab);
+        const b = h('button', { type: 'button', role: 'tab', text: label, 'data-tab': tab });
+        if (tab !== 'secret') b.style.color = ELEMENT_CSS[tab];
+        b.addEventListener('click', () => {
+          sfx.tap();
+          albumTab = tab;
+          paintPane();
+        });
+        tabs.append(b);
+      }
+      paintPane();
+
       const bar = h('div', { class: 'album-bar' }, [h('i', { style: `width:${Math.round((n / ALBUM_TOTAL) * 100)}%` })]);
+      const shinies = shinyCount();
       return h('div', { class: 'modal-card album', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'album-title' }, [
         h('h2', { id: 'album-title', text: t('albumTitle') }),
-        h('span', { class: 'album-meta', text: t('albumProgress', { n, m: ALBUM_TOTAL }) }),
+        h('div', { class: 'album-meta-row' }, [
+          h('span', { class: 'album-meta', text: t('albumProgress', { n, m: ALBUM_TOTAL }) }),
+          shinies ? h('span', { class: 'album-meta gold', text: `✦ ${t('albumShiny', { n: shinies })}` }) : null,
+        ]),
         bar,
-        ...rows,
+        tabs,
+        pane,
         detail,
         h('button', { type: 'button', class: 'btn btn-ghost', text: t('close'), onclick: close }),
       ]);
@@ -573,20 +659,99 @@ export function createUI(store) {
     openSettings();
   });
 
-  // ---- Keşif kartı ----
-  function discover(blob) {
+  // ---- Keşif kartı (yeni canavar, gizli tarif ya da parlak) ----
+  function discover(blob, opts = {}) {
+    const recipe = Array.isArray(opts.parents) && isHybrid(blob.el);
+    const shinyOnly = blob.shiny && opts.shinyNew && opts.isNew === false;
     haptic('success');
     sfx.discover();
-    openModal((close) =>
-      h('div', { class: 'modal-card discover', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'disc-title' }, [
-        h('span', { class: 'tag', text: t('newDiscovery') }),
-        h('img', { class: 'discover-img', src: `./assets/blobs/${artKey(blob.el, blob.lv)}.svg`, alt: '', width: '168', height: '168' }),
+    if (blob.shiny) setTimeout(() => sfx.coins(), 500);
+    openModal((close) => {
+      const img = h('img', { class: 'discover-img', src: `./assets/blobs/${artKey(blob.el, blob.lv)}.svg`, alt: '', width: '168', height: '168' });
+      if (blob.shiny) makeGold(img);
+      let tag = h('span', { class: 'tag', text: t('newDiscovery') });
+      if (recipe) tag = h('span', { class: 'tag recipe', text: t('secretRecipe') });
+      else if (shinyOnly || blob.shiny) tag = h('span', { class: 'tag shiny', text: `✦ ${t('shinyTag')}` });
+      const meta = recipe ? `Lv${blob.lv} · ${t(blob.el)} · ${t('recipeMeta', { a: t(opts.parents[0]), b: t(opts.parents[1]) })}` : `Lv${blob.lv} · ${t(blob.el)}`;
+      return h('div', { class: 'modal-card discover', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'disc-title' }, [
+        tag,
+        img,
         h('h2', { id: 'disc-title', text: blobName(blob.el, blob.lv) }),
-        h('div', { class: 'meta', text: `Lv${blob.lv} · ${t(blob.el)}` }),
+        h('div', { class: 'meta', text: meta }),
         h('p', { class: 'flavor', text: blobFlavor(blob.el, blob.lv) }),
+        blob.shiny ? h('p', { class: 'small-note', text: `✦ ${t('shinyDesc')}`, style: 'color:#FFE08A' }) : null,
         h('button', { type: 'button', class: 'btn btn-primary', text: t('awesome'), onclick: close }),
-      ]),
-    );
+      ]);
+    });
+  }
+
+  // ---- Arkadaş daveti ----
+  function openInvite() {
+    openModal((close) => {
+      const link = inviteLink();
+      const hasUser = Boolean(tgUserId());
+      const share = h('button', { type: 'button', class: 'btn btn-primary', text: t('inviteShare') });
+      const copy = h('button', { type: 'button', class: 'btn btn-ghost', text: t('inviteCopy') });
+      share.disabled = !hasUser;
+      copy.disabled = !hasUser;
+      share.addEventListener('click', () => {
+        sfx.tap();
+        haptic('light');
+        shareLink(link, t('shareText'));
+      });
+      copy.addEventListener('click', async () => {
+        const ok = await copyText(`${t('shareText')} ${link}`);
+        sfx.tap();
+        toast(ok ? t('inviteCopied') : link, ok ? 1800 : 5000);
+      });
+      return h('div', { class: 'modal-card', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'inv-title' }, [
+        h('div', { class: 'invite-hero', 'aria-hidden': 'true' }, [
+          h('img', { src: './assets/blobs/fire-2.svg', alt: '' }),
+          h('img', { class: 'egg', src: './assets/egg-rare.svg', alt: '' }),
+          h('img', { src: './assets/blobs/water-2.svg', alt: '' }),
+        ]),
+        h('h2', { id: 'inv-title', text: t('inviteTitle') }),
+        h('p', { text: t('inviteBody', { n: CFG.referralMerges, c: CFG.giftCrystals }) }),
+        h('div', { class: 'album-meta', text: t('inviteCount', { n: store.s.stats.friends || 0 }) }),
+        hasUser ? h('div', { class: 'invite-link', text: link }) : h('p', { class: 'small-note', text: t('inviteNoUser') }),
+        share,
+        copy,
+        h('button', { type: 'button', class: 'btn btn-ghost', text: t('close'), onclick: close }),
+      ]);
+    });
+  }
+
+  el.inviteBtn.addEventListener('click', () => {
+    sfx.tap();
+    haptic('light');
+    openInvite();
+  });
+
+  // ---- Hediye (davet ödülü) ----
+  function openGift(gift) {
+    openModal((close) => {
+      const name = gift.name || t('aFriend');
+      const invited = gift.kind === 'invited';
+      const btn = h('button', { type: 'button', class: 'btn btn-primary', text: t('openGift') });
+      btn.addEventListener('click', () => {
+        const res = store.claimGift(gift.id);
+        close();
+        if (res.error) return;
+        sfx.coins();
+        haptic('success');
+        if (res.blob && scene) scene.spawn({ cell: res.cell, blob: res.blob, discovered: res.discovered, shinyNew: res.shinyNew });
+        if (res.crystals) toast(t('crystalsAdded', { n: res.crystals }));
+        refresh();
+      });
+      const card = h('div', { class: 'modal-card', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'gift-title' }, [
+        h('img', { class: 'gift-egg', src: './assets/egg-rare.svg', alt: '' }),
+        h('h2', { id: 'gift-title', text: invited ? t('giftInvitedTitle') : t('giftFriendTitle') }),
+        h('p', { text: invited ? t('giftInvitedBody', { name }) : t('giftFriendBody', { name, n: CFG.referralMerges, c: CFG.giftCrystals }) }),
+        btn,
+      ]);
+      card.sticky = true;
+      return card;
+    });
   }
 
   // ---- Hoş geldin (çevrimdışı kazanç) ----
@@ -652,5 +817,6 @@ export function createUI(store) {
     openDaily,
     openAlbum,
     openSettings,
+    openInvite,
   };
 }

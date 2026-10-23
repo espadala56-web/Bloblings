@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { Store, migrate, rng } from '../web/src/store.js';
 import { replay, loadOnServer, newPlayerState } from '../web/src/sync.js';
-import { CFG, rateOf } from '../web/src/config.js';
+import { CFG, rateOf, artKey, topLevel, hybridOf, HYBRID_MULT, SHINY_MULT } from '../web/src/config.js';
 
 const t0 = 1_700_000_000_000;
 const clone = (x) => JSON.parse(JSON.stringify(x));
@@ -132,4 +132,62 @@ assert.equal(k.buyEnergy(t0 + 3).error, 'crystals');
 assert.equal(k.s.crystals, 5);
 const ksv = replay(clone({ ...base, energy: 0, energyAt: t0, crystals: 45 }), [1, 2, 3].map((n) => ({ seq: n, type: 'buyEnergy', t: t0 + n })), t0 + 3000, t0 + 3000);
 assert.equal(ksv.applied, 2); assert.equal(ksv.rejected, 1); assert.equal(ksv.state.crystals, 5);
+
+// 12) Gizli karışımlar: Lv3 farklı elementler -> Lv4 karışım; diğer seviyelerde yer değiştirir
+const hx = mk({ ...base, board: new Array(20).fill(null) });
+hx.s.board[0] = { el: 'fire', lv: 3 }; hx.s.board[1] = { el: 'water', lv: 3 };
+hx.s.board[2] = { el: 'fire', lv: 2 }; hx.s.board[3] = { el: 'water', lv: 2 };
+assert.equal(hx.knowsRecipe(0, 1), false, 'keşfedilmeden ipucu yok');
+let hr = hx.drop(0, 1, t0 + 10);
+assert.equal(hr.type, 'merge'); assert.equal(hr.recipe, true); assert.deepEqual(hr.blob, { el: 'steam', lv: 4 }); assert.equal(hr.discovered, true);
+assert.equal(hx.drop(2, 3, t0 + 20).type, 'swap', 'Lv2 farklı elementler yer değiştirir');
+assert.equal(hx.s.stats.recipes, 1);
+assert.ok(Math.abs(hx.blobRate(1) - rateOf(4) * HYBRID_MULT * (1 + CFG.synergyBonus)) < 1e-9, 'karışım: x1.5 ve iki ebeveyn de besler'); // komşu 2'de water(lv2) var
+hx.s.board[4] = { el: 'water', lv: 3 }; hx.s.board[5] = { el: 'forest', lv: 3 };
+assert.equal(hx.drop(4, 5, t0 + 30).blob.el, 'lotus');
+hx.s.board[6] = { el: 'forest', lv: 3 }; hx.s.board[7] = { el: 'fire', lv: 3 };
+assert.equal(hx.drop(7, 6, t0 + 40).blob.el, 'autumn');
+hx.s.board[8] = { el: 'steam', lv: 4 };
+assert.equal(hx.drop(8, 1, t0 + 50).blob.lv, 5, 'karışımlar kendi aralarında birleşir');
+assert.equal(hybridOf('fire', 'fire'), null);
+const hsv = replay(clone({ ...base, board: (() => { const b = new Array(20).fill(null); b[0] = { el: 'fire', lv: 3 }; b[1] = { el: 'water', lv: 3 }; b[2] = { el: 'fire', lv: 2 }; b[3] = { el: 'water', lv: 2 }; return b; })() }), clone(hx.pending.slice(0, 2)), t0 + 100, t0 + 25);
+assert.equal(hsv.rejected, 0); assert.deepEqual(hsv.state.board[1], { el: 'steam', lv: 4 });
+
+// 13) Çizim anahtarları
+assert.equal(artKey('fire', 7), 'fire-7'); assert.equal(artKey('fire', 14), 'fire-10');
+assert.equal(artKey('steam', 4), 'steam-1'); assert.equal(artKey('steam', 6), 'steam-3'); assert.equal(artKey('steam', 9), 'steam-3');
+assert.equal(topLevel('fire'), 10); assert.equal(topLevel('lotus'), 6);
+
+// 14) Parlak canavarlar: gelir x2, birleşince parlaklık kalır, telefon = sunucu
+const sh = mk({ ...base, board: new Array(20).fill(null) });
+sh.s.board[0] = { el: 'fire', lv: 2, shiny: true }; sh.s.board[1] = { el: 'fire', lv: 2 };
+assert.ok(Math.abs(sh.blobRate(0) - rateOf(2) * SHINY_MULT) < 1e-9);
+const shr = sh.drop(1, 0, t0 + 5);
+assert.equal(shr.blob.shiny, true); assert.equal(shr.shinyNew, true); assert.ok(sh.s.discovered['fire-3*']);
+// yeterince yumurtada parlak çıkar ve sunucu aynısını üretir
+const sg = mk({ ...base, board: new Array(20).fill(null), seed: 4242, energy: 30 });
+const sgStart = clone(sg.s);
+let shinies = 0;
+for (let i = 0; i < 600; i++) {
+  const e = sg.openEgg(t0 + 1000 + i * 10);
+  if (e.blob && e.blob.shiny) shinies++;
+  sg.s.board.fill(null); sg.s.energy = 30;
+}
+assert.ok(shinies > 5 && shinies < 40, `parlak oranı makul olmalı: ${shinies}/600`);
+const sgc = mk(sgStart);
+for (let i = 0; i < 20; i++) sgc.openEgg(t0 + 1000 + i * 10);
+const sgsv = replay(clone(sgStart), clone(sgc.pending), t0 + 9000, t0 + 1200);
+assert.deepEqual(sgsv.state.board, sgc.s.board);
+
+// 15) Hediye kutusu: yalnızca sunucunun koyduğu hediye alınabilir, bir kez
+const gf = mk({ ...base, inbox: [{ id: 'inv', kind: 'invited', name: 'Ali' }, { id: 'f42', kind: 'friend', name: 'Ayşe' }] });
+const gr = gf.claimGift('inv', t0 + 1);
+assert.equal(gr.kind, 'invited'); assert.ok(gr.blob); assert.equal(gr.blob.lv, 2);
+assert.equal(gf.claimGift('inv', t0 + 2).error, 'none');
+const cr0 = gf.s.crystals;
+const gr2 = gf.claimGift('f42', t0 + 3);
+assert.equal(gf.s.crystals - cr0, CFG.giftCrystals); assert.equal(gf.s.stats.friends, 1); assert.equal(gr2.kind, 'friend');
+const gsv = replay(clone({ ...base, inbox: [{ id: 'inv', kind: 'invited', name: 'Ali' }] }), [{ seq: 1, type: 'gift', id: 'inv', t: t0 + 1 }, { seq: 2, type: 'gift', id: 'inv', t: t0 + 2 }, { seq: 3, type: 'gift', id: 'fake', t: t0 + 3 }], t0 + 10, t0 + 10);
+assert.equal(gsv.applied, 1); assert.equal(gsv.rejected, 2); assert.equal(gsv.state.inbox.length, 0);
+
 console.log('Tüm kural testleri geçti ✔  (telefon = sunucu, hileler reddedildi)');

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+<path d="M8 106Q8 94 60 94Q112 94 112 106Q112 118 60 118Q8 118 8 106Z" fill="#4FCB6A" stroke="#1A1430" stroke-width="4.5" stroke-linejoin="round"/>
+<path d="M60 106L74 94L80 96Z" fill="#2A6FA8" stroke="#1A1430" stroke-width="3" stroke-linejoin="round"/>
+<path d="M30 108Q44 112 56 110" fill="none" stroke="#A6E86B" stroke-width="3" stroke-linecap="round"/>
+<ellipse cx="36" cy="102" rx="12" ry="6" fill="#2FA88A" stroke="#1A1430" stroke-width="4"/>
+<ellipse cx="84" cy="102" rx="12" ry="6" fill="#2FA88A" stroke="#1A1430" stroke-width="4"/>
+<circle cx="40" cy="46" r="15" fill="#3CC8A0" stroke="#1A1430" stroke-width="5"/>
+<circle cx="80" cy="46" r="15" fill="#3CC8A0" stroke="#1A1430" stroke-width="5"/>
+<path d="M18 80Q16 50 60 50Q104 50 102 80Q100 102 60 102Q20 102 18 80Z" fill="#3CC8A0" stroke="#1A1430" stroke-width="5" stroke-linejoin="round"/>
+<circle cx="40" cy="46" r="12.5" fill="#3CC8A0"/><circle cx="80" cy="46" r="12.5" fill="#3CC8A0"/>
+<ellipse cx="60" cy="88" rx="24" ry="11" fill="#C9F5E6"/>
+<ellipse cx="40" cy="46" rx="9" ry="9.5" fill="#fff" stroke="#1A1430" stroke-width="3.5"/>
+<ellipse cx="80" cy="46" rx="9" ry="9.5" fill="#fff" stroke="#1A1430" stroke-width="3.5"/>
+<circle cx="41.5" cy="48" r="5" fill="#1A1430"/>
+<circle cx="81.5" cy="48" r="5" fill="#1A1430"/>
+<circle cx="39.5" cy="45" r="1.8" fill="#fff"/>
+<circle cx="79.5" cy="45" r="1.8" fill="#fff"/>
+<path d="M48.0 42L48.0 33.2L54.0 38.0L60 26L66.0 38.0L72.0 33.2L72.0 42Z" fill="#FFC93C" stroke="#1A1430" stroke-width="3.5" stroke-linejoin="round"/>
+<circle cx="60" cy="35.9" r="2.2" fill="#FF4F7B" stroke="#1A1430" stroke-width="1.8"/>
+<path d="M38 72Q60 86 82 72" fill="none" stroke="#1A1430" stroke-width="3.8" stroke-linecap="round"/>
+<ellipse cx="30" cy="66" rx="6" ry="3.6" fill="#FF4F7B" opacity="0.5"/>
+<ellipse cx="90" cy="66" rx="6" ry="3.6" fill="#FF4F7B" opacity="0.5"/>
+<path d="M98 92Q88.2 87.8 89.6 79.4Q95.2 82.2 98 92Z" fill="#FF8FC0" stroke="#1A1430" stroke-width="1.8" stroke-linejoin="round"/>
+<path d="M98 92Q107.8 87.8 106.4 79.4Q100.8 82.2 98 92Z" fill="#FF8FC0" stroke="#1A1430" stroke-width="1.8" stroke-linejoin="round"/>
+<path d="M98 92Q92.4 82.2 98 75.2Q103.6 82.2 98 92Z" fill="#FFC0DE" stroke="#1A1430" stroke-width="1.8" stroke-linejoin="round"/>
+<circle cx="98" cy="88.5" r="1.8" fill="#FFC93C"/>
+</svg>

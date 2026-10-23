@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+<circle cx="60" cy="54" r="46" fill="none" stroke="#9EF0E6" stroke-width="3" stroke-dasharray="2 7" stroke-linecap="round"/>
+<path d="M60 106Q42 80 60 50Q78 80 60 106Z" transform="rotate(-80 60 106)" fill="#FF8FC0" stroke="#1A1430" stroke-width="3.5" stroke-linejoin="round"/>
+<path d="M60 106Q42 80 60 50Q78 80 60 106Z" transform="rotate(-52 60 106)" fill="#FF8FC0" stroke="#1A1430" stroke-width="3.5" stroke-linejoin="round"/>
+<path d="M60 106Q42 80 60 50Q78 80 60 106Z" transform="rotate(-26 60 106)" fill="#FF8FC0" stroke="#1A1430" stroke-width="3.5" stroke-linejoin="round"/>
+<path d="M60 106Q42 80 60 50Q78 80 60 106Z" transform="rotate(26 60 106)" fill="#FF8FC0" stroke="#1A1430" stroke-width="3.5" stroke-linejoin="round"/>
+<path d="M60 106Q42 80 60 50Q78 80 60 106Z" transform="rotate(52 60 106)" fill="#FF8FC0" stroke="#1A1430" stroke-width="3.5" stroke-linejoin="round"/>
+<path d="M60 106Q42 80 60 50Q78 80 60 106Z" transform="rotate(80 60 106)" fill="#FF8FC0" stroke="#1A1430" stroke-width="3.5" stroke-linejoin="round"/>
+<path d="M30 78Q28 42 60 38Q92 42 90 78Q86 94 60 94Q34 94 30 78Z" fill="#3CC8B4" stroke="#1A1430" stroke-width="5" stroke-linejoin="round"/>
+<path d="M60 104Q50 92 60 80Q70 92 60 104Z" fill="#FFC0DE" stroke="#1A1430" stroke-width="3.5" stroke-linejoin="round"/>
+<path d="M38 52Q44 44 54 44" fill="none" stroke="#9EF0E6" stroke-width="4" stroke-linecap="round"/>
+<path d="M60 44L64 50L60 56L56 50Z" fill="#4FD1E8" stroke="#1A1430" stroke-width="2.5" stroke-linejoin="round"/>
+<path d="M40.5 67Q48 57 55.5 67M64.5 67Q72 57 79.5 67" fill="none" stroke="#1A1430" stroke-width="3.8" stroke-linecap="round"/>
+<ellipse cx="38" cy="74" rx="5.5" ry="3.4" fill="#FF4F7B" opacity="0.55"/>
+<ellipse cx="82" cy="74" rx="5.5" ry="3.4" fill="#FF4F7B" opacity="0.55"/>
+<path d="M55 78q5 4 10 0" fill="none" stroke="#1A1430" stroke-width="3.2" stroke-linecap="round"/>
+<circle cx="14" cy="40" r="6" fill="#8FE0FF" stroke="#1A1430" stroke-width="3"/>
+<circle cx="106" cy="40" r="6" fill="#8FE0FF" stroke="#1A1430" stroke-width="3"/>
+<circle cx="60" cy="10" r="5" fill="#8FE0FF" stroke="#1A1430" stroke-width="2.6"/>
+</svg>

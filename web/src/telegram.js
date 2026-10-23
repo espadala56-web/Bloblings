@@ -60,6 +60,42 @@ export function rawInitData() {
   return tg ? tg.initData : '';
 }
 
+// Davet linki: t.me/BloblingsBot/play?startapp=r_<telegramId>
+export const BOT_LINK = 'https://t.me/BloblingsBot/play';
+
+export function inviteLink() {
+  const id = tgUserId();
+  return id ? `${BOT_LINK}?startapp=r_${id}` : BOT_LINK;
+}
+
+// Telegram'ın paylaşım penceresini açar (sohbet seçip gönderme).
+export function shareLink(url, text) {
+  const share = `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`;
+  try {
+    if (tg && atLeast('6.1') && tg.openTelegramLink) {
+      tg.openTelegramLink(share);
+      return true;
+    }
+  } catch (e) {
+    /* aşağıdaki yollara düş */
+  }
+  if (navigator.share) {
+    navigator.share({ url, text }).catch(() => {});
+    return true;
+  }
+  window.open(share, '_blank');
+  return true;
+}
+
+export async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 // Telegram'ın üst köşedeki geri tuşu: pencere açıkken pencereyi kapatır.
 let backHandler = null;
 export function setBackButton(handler) {
