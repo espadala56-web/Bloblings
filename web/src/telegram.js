@@ -61,7 +61,7 @@ export function rawInitData() {
 }
 
 // Oyunun Telegram kanalı. Boşsa kanal butonları gizlenir.
-export const CHANNEL_URL = '';
+export const CHANNEL_URL = 'https://t.me/+JuinJ4pXb_U1NDU0';
 
 // t.me linklerini Telegram içinde açar (kanala katılma vb.).
 export function openTgLink(url) {
