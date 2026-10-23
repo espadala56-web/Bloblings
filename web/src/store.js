@@ -1,13 +1,45 @@
-// Oyun durumu ve kuralları. Görselden bağımsızdır, bu yüzden test etmesi kolaydır.
-// Not: Şimdilik cihazda (localStorage) saklanır. Supabase'e geçince
-// enerji, altın ve birleştirmeler sunucuda doğrulanacak.
+// Oyun durumu ve kuralları. Görselden bağımsızdır.
+// Aynı dosya hem telefonda hem sunucuda (Supabase Edge Function) çalışır:
+// oyuncunun her hamlesi bir "eylem" olarak kaydedilir, sunucu bu eylemleri
+// kendi saatiyle tekrar oynatır ve sonucu doğrular.
 
 import { CFG, ELEMENTS, FED_BY, rateOf } from './config.js';
 
-const KEY = 'bloblings:v1';
-const VERSION = 2;
+const VERSION = 3;
+let storageKey = 'bloblings:v1';
+let timeOffset = 0;
 
-function freshState(now) {
+export function setStorageKey(k) {
+  storageKey = k;
+}
+
+// Sunucu saatiyle telefon saati arasındaki fark. Tüm hesaplar sunucu saatine göre yapılır.
+export function setTimeOffset(ms) {
+  timeOffset = ms;
+}
+
+export function clockNow() {
+  return Date.now() + timeOffset;
+}
+
+// Deterministik rastgele sayı üreteci (mulberry32).
+// Aynı tohum ve sayaçla telefonda ve sunucuda aynı yumurta çıkar.
+export function rng(seed, n) {
+  let a = (seed ^ Math.imul(n + 1, 0x9e3779b1)) >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let x = a;
+    x = Math.imul(x ^ (x >>> 15), x | 1);
+    x ^= x + Math.imul(x ^ (x >>> 7), x | 61);
+    return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+export function newSeed() {
+  return Math.floor(Math.random() * 4294967296) >>> 0;
+}
+
+export function freshState(now, seed = newSeed()) {
   const board = new Array(CFG.cols * CFG.rows).fill(null);
   // İlk açılışta hemen birleştirilebilecek bir çift: oyuncu ilk 5 saniyede ne yapacağını görsün.
   board[5] = { el: 'fire', lv: 1 };
@@ -15,6 +47,9 @@ function freshState(now) {
   board[10] = { el: 'water', lv: 1 };
   return {
     v: VERSION,
+    seed,
+    seq: 0,
+    clock: now,
     board,
     slotsOpen: CFG.startOpen,
     energy: CFG.energyCap,
@@ -22,42 +57,69 @@ function freshState(now) {
     gold: 0,
     crystals: CFG.startCrystals,
     eggQuality: 0,
-    lastSeen: now,
     discovered: { 'fire-1': true, 'water-1': true },
     stats: { merges: 0, eggs: 0 },
+    lastOffline: null,
   };
 }
 
 // Eski kayıtları yeni sürüme taşır. Oyuncunun ilerlemesi kaybolmaz.
-export function migrate(s) {
-  if (!s || !Array.isArray(s.board)) return null;
+export function migrate(s, now = clockNow()) {
+  if (!s || typeof s !== 'object' || !Array.isArray(s.board)) return null;
   if (s.v === 1) {
     // v1: 4x4 tahta. v2: 4x5 tahta, son sıra kilitli.
     while (s.board.length < CFG.cols * CFG.rows) s.board.push(null);
     s.slotsOpen = CFG.startOpen;
     s.v = 2;
   }
+  if (s.v === 2) {
+    // v3: eylem günlüğü, deterministik yumurtalar, sunucu saati.
+    s.clock = typeof s.lastSeen === 'number' ? s.lastSeen : now;
+    delete s.lastSeen;
+    s.seed = newSeed();
+    s.seq = 0;
+    s.lastOffline = null;
+    s.v = 3;
+  }
   if (s.v !== VERSION) return null;
   if (typeof s.eggQuality !== 'number') s.eggQuality = 0;
   if (!s.stats) s.stats = { merges: 0, eggs: 0 };
+  if (!s.discovered) s.discovered = {};
   return s;
 }
 
-function readStorage() {
+function readStorage(now) {
   try {
-    const raw = globalThis.localStorage && globalThis.localStorage.getItem(KEY);
+    const raw = globalThis.localStorage && globalThis.localStorage.getItem(storageKey);
     if (!raw) return null;
-    return migrate(JSON.parse(raw));
+    const obj = JSON.parse(raw);
+    if (obj && obj.state) {
+      const state = migrate(obj.state, now);
+      return state ? { state, pending: Array.isArray(obj.pending) ? obj.pending : [] } : null;
+    }
+    const state = migrate(obj, now); // eski biçim: doğrudan durum
+    return state ? { state, pending: [] } : null;
   } catch (e) {
     return null;
   }
 }
 
 export class Store extends EventTarget {
-  constructor(now = Date.now(), initial = undefined) {
+  // persist: cihazda sakla (sunucuda false). record: eylemleri kaydet (sunucuda false).
+  constructor({ now = clockNow(), initial = null, persist = true, record = true } = {}) {
     super();
-    this.s = (initial && migrate(initial)) || readStorage() || freshState(now);
-    this.syncEnergy(now);
+    this.persist = persist;
+    this.recording = record;
+    this.pending = [];
+    let state = initial ? migrate(initial, now) : null;
+    if (!state && persist) {
+      const saved = readStorage(now);
+      if (saved) {
+        state = saved.state;
+        this.pending = saved.pending;
+      }
+    }
+    this.s = state || freshState(now);
     this.lastSaveAt = now;
   }
 
@@ -65,22 +127,92 @@ export class Store extends EventTarget {
     this.dispatchEvent(new CustomEvent(type, { detail }));
   }
 
-  save(now = Date.now()) {
-    this.s.lastSeen = now;
+  save(now = clockNow()) {
     this.lastSaveAt = now;
+    if (!this.persist) return;
     try {
-      if (globalThis.localStorage) globalThis.localStorage.setItem(KEY, JSON.stringify(this.s));
+      if (globalThis.localStorage) {
+        globalThis.localStorage.setItem(storageKey, JSON.stringify({ state: this.s, pending: this.pending }));
+      }
     } catch (e) {
       /* depolama kapalıysa oyun yine çalışır */
     }
   }
 
-  // ---- Enerji ----
-  syncEnergy(now = Date.now()) {
+  record(action) {
+    if (!this.recording) return;
+    this.s.seq += 1;
+    action.seq = this.s.seq;
+    this.pending.push(action);
+  }
+
+  // Bir eylemi (telefondan gelen) kurallara göre uygular. Sunucu ve yeniden oynatma kullanır.
+  apply(a) {
+    const prev = this.recording;
+    this.recording = false;
+    let res;
+    const t = Number(a && a.t);
+    switch (a && a.type) {
+      case 'drop':
+        res = this.drop(Number(a.from) | 0, Number(a.to) | 0, t);
+        break;
+      case 'egg':
+        res = this.openEgg(t);
+        break;
+      case 'unlock':
+        res = this.unlockSlot(t);
+        break;
+      case 'upgradeEgg':
+        res = this.upgradeEgg(t);
+        break;
+      case 'bonus':
+        res = this.claimOfflineBonus(t);
+        break;
+      default:
+        res = { error: 'unknown' };
+    }
+    this.recording = prev;
+    if (a && typeof a.seq === 'number' && a.seq > this.s.seq) this.s.seq = a.seq;
+    return res;
+  }
+
+  // Sunucudan gelen durumu benimser; henüz sunucuya ulaşmamış eylemleri üstüne tekrar uygular.
+  adopt(serverState) {
+    const state = migrate(serverState);
+    if (!state) return false;
+    const keep = this.pending.filter((a) => a.seq > state.seq);
+    this.s = state;
+    this.pending = [];
+    for (const a of keep) this.apply(a);
+    this.pending = keep;
+    this.emit('change');
+    return true;
+  }
+
+  // ---- Zaman: altın birikimi ve enerji ----
+
+  // Durumu verilen ana kadar ilerletir. Uzun yokluklar en fazla 8 saat sayılır.
+  advance(now = clockNow()) {
+    const s = this.s;
+    if (!Number.isFinite(now)) return 0;
+    const dt = now - s.clock;
+    if (dt <= 0) return 0;
+    const credited = Math.min(dt, CFG.offlineCapMs);
+    const gain = (this.goldRate() * credited) / 1000;
+    s.gold += gain;
+    s.clock = now;
+    this.syncEnergy(now);
+    if (dt >= CFG.offlineMinMs) {
+      s.lastOffline = { gold: Math.floor(gain), ms: credited, at: now, claimed: false };
+    }
+    return gain;
+  }
+
+  syncEnergy(now = clockNow()) {
     const s = this.s;
     const R = CFG.energyRegenMs;
     if (s.energy >= CFG.energyCap) {
-      s.energyAt = now;
+      s.energyAt = Math.max(s.energyAt, now);
       return;
     }
     const gained = Math.floor((now - s.energyAt) / R);
@@ -91,14 +223,35 @@ export class Store extends EventTarget {
     }
   }
 
-  nextEnergyIn(now = Date.now()) {
+  nextEnergyIn(now = clockNow()) {
     if (this.s.energy >= CFG.energyCap) return 0;
     return Math.max(0, CFG.energyRegenMs - (now - this.s.energyAt));
   }
 
-  // ---- Tahta geometrisi ----
+  // Açılışta gösterilecek "sen yokken" raporu (taze ve alınmamışsa).
+  offlineReport(now = clockNow()) {
+    const lo = this.s.lastOffline;
+    if (!lo || lo.claimed || lo.gold <= 0) return null;
+    if (now - lo.at > 10 * 60 * 1000) return null;
+    return { ms: lo.ms, gold: lo.gold };
+  }
+
+  // Reklam karşılığı çevrimdışı kazancı ikiye katlar (bir kez).
+  // TODO(reklam): yayında Adsgram'ın sunucu bildirimiyle doğrulanacak.
+  claimOfflineBonus(now = clockNow()) {
+    const lo = this.s.lastOffline;
+    if (!lo || lo.claimed || lo.gold <= 0) return { error: 'none' };
+    lo.claimed = true;
+    this.advance(now);
+    this.s.gold += lo.gold;
+    this.record({ type: 'bonus', t: now });
+    this.emit('change');
+    return { gold: lo.gold };
+  }
+
+  // ---- Tahta geometrisi ve element zinciri ----
   isOpen(i) {
-    return i >= 0 && i < this.s.slotsOpen;
+    return Number.isInteger(i) && i >= 0 && i < this.s.slotsOpen;
   }
 
   neighbors(i) {
@@ -112,7 +265,6 @@ export class Store extends EventTarget {
     return out;
   }
 
-  // i'deki canavarı besleyen komşuların listesi.
   feedersOf(i) {
     const b = this.s.board[i];
     if (!b) return [];
@@ -123,7 +275,6 @@ export class Store extends EventTarget {
     });
   }
 
-  // Görsel köprüler için: [besleyen, beslenen] çiftleri.
   synergyLinks() {
     const links = [];
     this.s.board.forEach((b, i) => {
@@ -133,7 +284,6 @@ export class Store extends EventTarget {
     return links;
   }
 
-  // ---- Altın ----
   blobRate(i) {
     const b = this.s.board[i];
     if (!b) return 0;
@@ -146,40 +296,21 @@ export class Store extends EventTarget {
     return r;
   }
 
-  tick(dtMs) {
-    this.s.gold += (this.goldRate() * dtMs) / 1000;
-  }
-
-  offlineReport(now = Date.now()) {
-    const away = Math.max(0, now - this.s.lastSeen);
-    if (away < CFG.offlineMinMs) return null;
-    const ms = Math.min(away, CFG.offlineCapMs);
-    const gold = Math.floor((this.goldRate() * ms) / 1000);
-    if (gold <= 0) return null;
-    return { ms, gold };
-  }
-
-  collectOffline(report, mult = 1) {
-    if (!report) return 0;
-    const amount = report.gold * mult;
-    this.s.gold += amount;
-    this.emit('change');
-    return amount;
-  }
-
   // ---- Geliştirmeler ----
   nextSlotCost() {
     const k = this.s.slotsOpen - CFG.startOpen;
     return k < CFG.slotCosts.length ? CFG.slotCosts[k] : null;
   }
 
-  unlockSlot() {
+  unlockSlot(now = clockNow()) {
+    this.advance(now);
     const cost = this.nextSlotCost();
     if (cost === null) return { error: 'max' };
     if (this.s.gold < cost) return { error: 'gold', need: Math.ceil(cost - this.s.gold) };
     this.s.gold -= cost;
     const cell = this.s.slotsOpen;
     this.s.slotsOpen += 1;
+    this.record({ type: 'unlock', t: now });
     this.emit('change');
     return { cell, cost };
   }
@@ -189,12 +320,14 @@ export class Store extends EventTarget {
     return q < CFG.eggCosts.length ? CFG.eggCosts[q] : null;
   }
 
-  upgradeEgg() {
+  upgradeEgg(now = clockNow()) {
+    this.advance(now);
     const cost = this.nextEggCost();
     if (cost === null) return { error: 'max' };
     if (this.s.gold < cost) return { error: 'gold', need: Math.ceil(cost - this.s.gold) };
     this.s.gold -= cost;
     this.s.eggQuality += 1;
+    this.record({ type: 'upgradeEgg', t: now });
     this.emit('change');
     return { level: this.s.eggQuality + 1, cost };
   }
@@ -236,35 +369,37 @@ export class Store extends EventTarget {
     return isNew;
   }
 
-  // Sürükle-bırak sonucunu uygular: taşı, yer değiştir ya da birleştir.
-  drop(from, to) {
+  // Sürükle-bırak: taşı, yer değiştir ya da birleştir.
+  drop(from, to, now = clockNow()) {
     const board = this.s.board;
-    if (from === to || !this.isOpen(to) || !board[from]) return { type: 'none' };
+    if (from === to || !this.isOpen(from) || !this.isOpen(to) || !board[from]) return { type: 'none' };
+    this.advance(now);
     const A = board[from];
     const B = board[to];
+    let res;
     if (!B) {
       board[to] = A;
       board[from] = null;
-      this.emit('change');
-      return { type: 'move' };
-    }
-    if (A.el === B.el && A.lv === B.lv) {
+      res = { type: 'move' };
+    } else if (A.el === B.el && A.lv === B.lv) {
       const merged = { el: A.el, lv: A.lv + 1 };
       board[to] = merged;
       board[from] = null;
       this.s.stats.merges += 1;
-      const discovered = this.markDiscovered(merged);
-      this.emit('change');
-      return { type: 'merge', blob: merged, discovered };
+      res = { type: 'merge', blob: merged, discovered: this.markDiscovered(merged) };
+    } else {
+      board[to] = A;
+      board[from] = B;
+      res = { type: 'swap' };
     }
-    board[to] = A;
-    board[from] = B;
+    this.record({ type: 'drop', from, to, t: now });
     this.emit('change');
-    return { type: 'swap' };
+    return res;
   }
 
-  // Yumurta açar: 1 enerji harcar, rastgele boş bir yuvaya canavar koyar.
-  openEgg(now = Date.now(), rnd = Math.random) {
+  // Yumurta açar: 1 enerji harcar. Nereye ve hangi elementin çıkacağı tohumdan belirlenir.
+  openEgg(now = clockNow()) {
+    this.advance(now);
     this.syncEnergy(now);
     if (this.s.energy < CFG.eggCost) return { error: 'energy' };
     const empty = this.emptyCells();
@@ -272,12 +407,14 @@ export class Store extends EventTarget {
     const wasFull = this.s.energy >= CFG.energyCap;
     this.s.energy -= CFG.eggCost;
     if (wasFull) this.s.energyAt = now; // dolum sayacı ilk harcamada başlar
-    const cell = empty[Math.floor(rnd() * empty.length)];
-    const el = ELEMENTS[Math.floor(rnd() * ELEMENTS.length)];
+    const r = rng(this.s.seed, this.s.stats.eggs);
+    const cell = empty[Math.floor(r() * empty.length)];
+    const el = ELEMENTS[Math.floor(r() * ELEMENTS.length)];
     const blob = { el, lv: 1 + this.s.eggQuality };
     this.s.board[cell] = blob;
     this.s.stats.eggs += 1;
     const discovered = this.markDiscovered(blob);
+    this.record({ type: 'egg', t: now });
     this.emit('change');
     return { cell, blob, discovered };
   }

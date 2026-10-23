@@ -17,6 +17,8 @@ web/                 Yayına çıkan oyun (Cloudflare bu klasörü yayınlar)
     i18n.js          Türkçe / İngilizce metinler
     telegram.js      Telegram Mini App bağlantısı
     ads.js           Ödüllü reklam (şimdilik test modu)
+    net.js           Sunucu bağlantısı: yükle ve hamleleri gönder
+    sync.js          Sunucu doğrulama kuralları (Edge Function da kullanır)
     scenes/
       BoardScene.js  Tahta, sürükle-birleştir, efektler (Phaser)
   assets/            Karakter çizimleri (SVG)
@@ -24,6 +26,27 @@ web/                 Yayına çıkan oyun (Cloudflare bu klasörü yayınlar)
 ```
 
 Derleme adımı yoktur: dosyalar olduğu gibi yayınlanır.
+
+```
+supabase/
+  migrations/        Veritabanı tabloları (players, events)
+  functions/game/    Oyun sunucusu (Edge Function)
+    index.ts         Telegram doğrulama + load / sync
+    rules/           web/src kurallarının kopyası (scripts/sync-rules.sh)
+```
+
+## Sunucu nasıl çalışır?
+
+- Oyun açılınca telefon, Telegram'ın imzaladığı `initData` ile sunucudan ilerlemeyi ister.
+  İmza, Telegram'ın herkese açık Ed25519 anahtarıyla doğrulanır; sunucuda bot token'ı tutulmaz.
+- Oyuncunun her hamlesi (birleştirme, yumurta, satın alma...) sıra numaralı bir eylem olarak kaydedilir
+  ve 15 saniyede bir (ve oyun kapanırken) sunucuya gönderilir.
+- Sunucu aynı kural dosyalarını (`store.js`) kendi saatiyle tekrar oynatır. Kurala uymayan hamle
+  reddedilir, telefon sunucunun sonucunu benimser. Yumurtalar oyuncuya özel bir tohumdan çıkar,
+  böylece telefon ve sunucu aynı sonucu bulur.
+- Bağlantı yoksa oyun cihazda devam eder; bekleyen hamleler bağlantı gelince gönderilir.
+
+Kurallarda değişiklik yaptıktan sonra: `scripts/sync-rules.sh` çalıştır ve `game` fonksiyonunu yeniden yayınla.
 
 ## Cloudflare kurulumu (bir kez)
 
@@ -60,7 +83,7 @@ Sonra tarayıcıda `http://localhost:8080` aç. Telegram dışında da çalış�
 - [x] Element zinciri: Su ormanı, orman ateşi, ateş suyu besler (+%25 / komşu)
 - [x] Altın harcama: kilitli yuvalar, yumurta kalitesi
 - [x] Keşif kartları ve canlı (nefes alan) canavarlar
-- [ ] Supabase: oyuncu kaydı, Telegram doğrulaması, sunucu tarafı ekonomi
+- [x] Supabase: oyuncu kaydı, Telegram doğrulaması, sunucu tarafı ekonomi
 - [ ] Albüm ekranı
 - [ ] Füzyon ve hediye yumurtası (arkadaş daveti)
 - [ ] Adsgram ödüllü reklam (sunucu doğrulamalı)

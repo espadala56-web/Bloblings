@@ -47,6 +47,26 @@ export class BoardScene extends P.Scene {
   init(data) {
     this.store = data.store;
     this.ui = data.ui;
+    this.onReady = data.onReady;
+    this.needsRebuild = false;
+  }
+
+  // Sunucu farklı bir tahta döndürdüğünde her şeyi baştan çizer.
+  rebuild() {
+    if (!this.objs) return;
+    if (this.objs.some((o) => o && o.dragging)) {
+      this.needsRebuild = true; // sürükleme bitince yapılır
+      return;
+    }
+    this.needsRebuild = false;
+    this.highlight.clear();
+    for (const o of this.objs) this.destroyBlob(o);
+    this.objs = new Array(this.store.s.board.length).fill(null);
+    this.store.s.board.forEach((b, i) => {
+      if (b) this.objs[i] = this.createBlob(i, b);
+    });
+    for (let i = 0; i < CFG.cols * CFG.rows; i++) this.drawSlot(i);
+    this.drawLinks();
   }
 
   preload() {
@@ -96,6 +116,7 @@ export class BoardScene extends P.Scene {
     this.input.on('dragend', this.onDragEnd, this);
 
     this.ui.attachScene(this);
+    if (this.onReady) this.onReady(this);
   }
 
   // ---- Dokular ----
@@ -263,6 +284,7 @@ export class BoardScene extends P.Scene {
   }
 
   placeAt(o, x, y) {
+    if (!o.img.scene) return; // yeniden çizimde silinmiş nesne
     o.cx = x;
     o.cy = y;
     o.img.setPosition(x, y + IMG_DY);
@@ -439,6 +461,7 @@ export class BoardScene extends P.Scene {
     }
     this.drawLinks();
     this.ui.refresh();
+    if (this.needsRebuild) this.rebuild();
   }
 
   // ---- Yumurtadan çıkış ----
@@ -464,6 +487,7 @@ export class BoardScene extends P.Scene {
       ],
       onComplete: () => {
         egg.destroy();
+        if (!o.img.scene) return; // bu arada tahta yeniden çizildiyse
         o.img.setVisible(true);
         o.badge.setVisible(true);
         o.label.setVisible(true);

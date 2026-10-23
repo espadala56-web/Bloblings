@@ -271,19 +271,20 @@ export function createUI(store) {
       });
       dbl.querySelector('span').textContent = `${t('collectDouble')} · ${formatNum(report.gold * 2)}`;
       const one = h('button', { type: 'button', class: 'btn btn-ghost', text: t('collect') });
-      const finish = (mult) => {
-        const got = store.collectOffline(report, mult);
+      // Altın zaten kasaya eklendi; "2 katı" reklam karşılığı aynı miktarı bir kez daha verir.
+      const finish = (extra) => {
         close();
         haptic('success');
-        toast(t('collected', { n: formatNum(got) }));
+        toast(t('collected', { n: formatNum(report.gold + extra) }));
       };
-      one.addEventListener('click', () => finish(1));
+      one.addEventListener('click', () => finish(0));
       dbl.addEventListener('click', async () => {
         dbl.disabled = true;
         one.disabled = true;
         const r = await showRewarded('offline_x2');
         if (!ADS_LIVE && r.test) toast(t('adTest'));
-        finish(r.ok ? 2 : 1);
+        const res = r.ok ? store.claimOfflineBonus() : { error: 'ad' };
+        finish(res.gold || 0);
       });
       return h('div', { class: 'modal-card', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'welcome-title' }, [
         h('h2', { id: 'welcome-title', text: t('welcomeTitle') }),

@@ -1,22 +1,41 @@
-// Giriş noktası: Telegram'ı hazırlar, durumu yükler, Phaser tahtasını başlatır.
+// Giriş noktası: Telegram'ı hazırlar, ilerlemeyi sunucudan yükler, Phaser tahtasını başlatır.
 
 import { CFG } from './config.js';
-import { Store } from './store.js';
+import { Store, setStorageKey, clockNow } from './store.js';
 import { BoardScene, boardSize } from './scenes/BoardScene.js';
-import { initTelegram, userLang, onHide } from './telegram.js';
-import { setLang } from './i18n.js';
+import { initTelegram, userLang, onHide, inTelegram, tgUserId, rawInitData } from './telegram.js';
+import { setLang, t } from './i18n.js';
 import { createUI } from './ui.js';
+import { createSync, httpTransport } from './net.js';
 
 const P = window.Phaser;
 const BG = '#1B1736';
+const SYNC_EVERY_MS = 15000;
 
 initTelegram(BG);
 setLang(userLang());
 
+// Her Telegram hesabının cihazdaki kaydı ayrı tutulur.
+const uid = tgUserId();
+setStorageKey(uid ? `bloblings:u${uid}` : 'bloblings:v1');
+
 const store = new Store();
-// Çevrimdışı kazanç, kayıt güncellenmeden önce hesaplanmalı.
-const offline = store.offlineReport();
 const ui = createUI(store);
+let scene = null;
+
+const net = createSync(store, {
+  post: httpTransport(rawInitData),
+  enabled: inTelegram,
+  hooks: {
+    onCorrected: () => {
+      if (scene) scene.rebuild();
+      ui.refresh();
+    },
+    onAuthLost: (reason) => {
+      if (reason === 'expired') ui.toast(t('sessionExpired'), 4000);
+    },
+  },
+});
 
 // Yazı tipi gelmeden Phaser yazı çizerse yedek font kullanır; kısa bir süre bekle.
 async function fontsReady(ms = 1500) {
@@ -28,7 +47,14 @@ async function fontsReady(ms = 1500) {
 }
 
 async function boot() {
-  await fontsReady();
+  const [loaded] = await Promise.all([net.load(), fontsReady()]);
+  if (!loaded.ok) {
+    // Sunucuya ulaşılamadı ya da Telegram dışında açıldı: cihazdaki kayıtla devam.
+    store.advance(clockNow());
+    if (inTelegram) ui.toast(t('offlineMode'), 3500);
+  }
+  const offline = store.offlineReport();
+
   const { w, h } = boardSize();
   document.getElementById('game').style.aspectRatio = `${w} / ${h}`;
   const game = new P.Game({
@@ -40,27 +66,38 @@ async function boot() {
     banner: false,
     scale: { mode: P.Scale.FIT, autoCenter: P.Scale.CENTER_HORIZONTALLY },
   });
-  game.scene.add('board', BoardScene, true, { store, ui });
+  game.scene.add('board', BoardScene, true, { store, ui, onReady: (s) => (scene = s) });
 
   // Altın sayacı ve enerji dolumu.
-  let last = performance.now();
   setInterval(() => {
-    const nowPerf = performance.now();
-    const dt = Math.min(nowPerf - last, CFG.offlineCapMs);
-    last = nowPerf;
-    store.tick(dt);
-    store.syncEnergy();
+    store.advance(clockNow());
     ui.refresh();
-    if (Date.now() - store.lastSaveAt > CFG.saveEveryMs) store.save();
+    if (clockNow() - store.lastSaveAt > CFG.saveEveryMs) store.save();
   }, 100);
 
-  onHide(() => store.save());
+  // Hamleleri sunucuya gönder.
+  setInterval(() => {
+    if (net.online) {
+      net.sync();
+    } else if (inTelegram) {
+      // Bağlantı koptuysa yeniden dene; bekleyen hamleler korunur.
+      net.load().then((r) => {
+        if (r.ok && scene) scene.rebuild();
+        ui.refresh();
+      });
+    }
+  }, SYNC_EVERY_MS);
+
+  onHide(() => {
+    store.save();
+    net.sync({ keepalive: true });
+  });
   store.save();
 
   if (offline) setTimeout(() => ui.showWelcome(offline), 350);
 
   // Test ve hata ayıklama için.
-  window.__bloblings = { store, game, ui };
+  window.__bloblings = { store, game, ui, net };
 }
 
 boot();

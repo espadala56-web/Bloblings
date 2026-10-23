@@ -48,6 +48,11 @@ export function startParam() {
   return fromTg || new URLSearchParams(location.search).get('startapp') || null;
 }
 
+export function tgUserId() {
+  const u = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
+  return u && typeof u.id === 'number' ? u.id : null;
+}
+
 // Sunucu doğrulaması için ham initData. Asla istemcide güvenilir sayılmaz.
 export function rawInitData() {
   return tg ? tg.initData : '';
