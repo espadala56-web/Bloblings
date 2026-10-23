@@ -84,9 +84,11 @@ Sonra tarayıcıda `http://localhost:8080` aç. Telegram dışında da çalış�
 - [x] Altın harcama: kilitli yuvalar, yumurta kalitesi
 - [x] Keşif kartları ve canlı (nefes alan) canavarlar
 - [x] Supabase: oyuncu kaydı, Telegram doğrulaması, sunucu tarafı ekonomi
-- [ ] Albüm ekranı
+- [x] Albüm ekranı (keşfedilmeyenler için "nasıl bulunur" ipucu)
+- [x] Günlük giriş serisi: 7 günlük takvim, 7. gün nadir yumurta
+- [x] Enerji penceresi: reklamla +10 (günde 3) ya da kristalle +10
+- [x] Ses efektleri (Web Audio, dosya yok) ve ayarlar: ses, titreşim, dil
 - [ ] Füzyon ve hediye yumurtası (arkadaş daveti)
 - [ ] Adsgram ödüllü reklam (sunucu doğrulamalı)
 - [ ] Telegram Stars mağazası ve Kâşif Pası
-- [ ] Günlük giriş serisi, görevler, bildirimler
-- [ ] Ses efektleri
+- [ ] Görevler ve bildirimler

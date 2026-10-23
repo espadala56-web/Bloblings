@@ -1,5 +1,7 @@
 // Telegram Mini App köprüsü. Oyun Telegram dışında (tarayıcıda) açılınca da çalışır.
 
+import { getPref } from './prefs.js';
+
 const tg = typeof window !== 'undefined' && window.Telegram ? window.Telegram.WebApp : null;
 
 export const inTelegram = Boolean(tg && tg.initData);
@@ -26,7 +28,7 @@ export function initTelegram(bg) {
 
 export function haptic(kind = 'light') {
   try {
-    if (!tg || !atLeast('6.1')) return;
+    if (!tg || !atLeast('6.1') || !getPref('haptics')) return;
     if (kind === 'success' || kind === 'error' || kind === 'warning') {
       tg.HapticFeedback.notificationOccurred(kind);
     } else {
@@ -56,6 +58,24 @@ export function tgUserId() {
 // Sunucu doğrulaması için ham initData. Asla istemcide güvenilir sayılmaz.
 export function rawInitData() {
   return tg ? tg.initData : '';
+}
+
+// Telegram'ın üst köşedeki geri tuşu: pencere açıkken pencereyi kapatır.
+let backHandler = null;
+export function setBackButton(handler) {
+  if (!tg || !atLeast('6.1') || !tg.BackButton) return;
+  try {
+    if (backHandler) tg.BackButton.offClick(backHandler);
+    backHandler = handler || null;
+    if (handler) {
+      tg.BackButton.onClick(handler);
+      tg.BackButton.show();
+    } else {
+      tg.BackButton.hide();
+    }
+  } catch (e) {
+    /* eski Telegram sürümleri */
+  }
 }
 
 export function onHide(fn) {

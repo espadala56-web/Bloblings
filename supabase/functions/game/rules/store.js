@@ -61,7 +61,13 @@ export function freshState(now, seed = newSeed()) {
     discovered: { 'fire-1': true, 'water-1': true },
     stats: { merges: 0, eggs: 0 },
     lastOffline: null,
+    daily: { streak: 0, lastAt: 0 },
+    ads: { day: '', energy: 0 },
   };
+}
+
+function utcDay(now) {
+  return new Date(now).toISOString().slice(0, 10);
 }
 
 // Eski kayıtları yeni sürüme taşır. Oyuncunun ilerlemesi kaybolmaz.
@@ -86,6 +92,8 @@ export function migrate(s, now = clockNow()) {
   if (typeof s.eggQuality !== 'number') s.eggQuality = 0;
   if (!s.stats) s.stats = { merges: 0, eggs: 0 };
   if (!s.discovered) s.discovered = {};
+  if (!s.daily) s.daily = { streak: 0, lastAt: 0 };
+  if (!s.ads) s.ads = { day: '', energy: 0 };
   return s;
 }
 
@@ -169,6 +177,15 @@ export class Store extends EventTarget {
       case 'bonus':
         res = this.claimOfflineBonus(t);
         break;
+      case 'daily':
+        res = this.claimDaily(t);
+        break;
+      case 'adEnergy':
+        res = this.adEnergy(t);
+        break;
+      case 'buyEnergy':
+        res = this.buyEnergy(t);
+        break;
       default:
         res = { error: 'unknown' };
     }
@@ -248,6 +265,93 @@ export class Store extends EventTarget {
     this.record({ type: 'bonus', t: now });
     this.emit('change');
     return { gold: lo.gold };
+  }
+
+  // ---- Günlük giriş ödülü ----
+  dailyStatus(now = clockNow()) {
+    const d = this.s.daily;
+    const since = now - d.lastAt;
+    const broken = d.lastAt > 0 && since > CFG.dailyResetMs;
+    const streak = broken ? 0 : d.streak;
+    const ready = d.lastAt === 0 || since >= CFG.dailyMinGapMs;
+    return { ready, streak, nextDay: (streak % 7) + 1, nextIn: ready ? 0 : CFG.dailyMinGapMs - since };
+  }
+
+  claimDaily(now = clockNow()) {
+    this.advance(now);
+    const st = this.dailyStatus(now);
+    if (!st.ready) return { error: 'wait', nextIn: st.nextIn };
+    const day = st.nextDay;
+    const r = CFG.dailyRewards[day - 1];
+    const out = { day };
+    if (r.energy) {
+      this.syncEnergy(now);
+      this.s.energy += r.energy;
+      out.energy = r.energy;
+    }
+    if (r.crystals) {
+      this.s.crystals += r.crystals;
+      out.crystals = r.crystals;
+    }
+    if (r.goldSec) {
+      const g = Math.max(300, Math.floor(this.goldRate() * r.goldSec));
+      this.s.gold += g;
+      out.gold = g;
+    }
+    if (r.rareEgg) {
+      const empty = this.emptyCells();
+      if (empty.length) {
+        const rr = rng(this.s.seed, this.s.stats.eggs);
+        const cell = empty[Math.floor(rr() * empty.length)];
+        const el = ELEMENTS[Math.floor(rr() * ELEMENTS.length)];
+        const blob = { el, lv: 2 + this.s.eggQuality };
+        this.s.board[cell] = blob;
+        this.s.stats.eggs += 1;
+        out.cell = cell;
+        out.blob = blob;
+        out.discovered = this.markDiscovered(blob);
+      } else {
+        this.s.crystals += 60; // tahta doluysa yumurta yerine kristal
+        out.crystals = 60;
+      }
+    }
+    this.s.daily = { streak: day, lastAt: now };
+    this.record({ type: 'daily', t: now });
+    this.emit('change');
+    return out;
+  }
+
+  // ---- Reklam karşılığı enerji ----
+  // TODO(reklam): yayında Adsgram'ın sunucu bildirimiyle doğrulanacak.
+  adEnergyLeft(now = clockNow()) {
+    const a = this.s.ads;
+    return a.day === utcDay(now) ? Math.max(0, CFG.adEnergyPerDay - a.energy) : CFG.adEnergyPerDay;
+  }
+
+  adEnergy(now = clockNow()) {
+    this.advance(now);
+    const day = utcDay(now);
+    if (this.s.ads.day !== day) this.s.ads = { day, energy: 0 };
+    if (this.s.ads.energy >= CFG.adEnergyPerDay) return { error: 'limit' };
+    this.syncEnergy(now);
+    this.s.energy += CFG.adEnergyAmount;
+    this.s.ads.energy += 1;
+    this.record({ type: 'adEnergy', t: now });
+    this.emit('change');
+    return { energy: CFG.adEnergyAmount, left: CFG.adEnergyPerDay - this.s.ads.energy };
+  }
+
+  // Kristalle enerji satın alma.
+  buyEnergy(now = clockNow()) {
+    this.advance(now);
+    const cost = CFG.crystalEnergyCost;
+    if (this.s.crystals < cost) return { error: 'crystals', need: cost - this.s.crystals };
+    this.syncEnergy(now);
+    this.s.crystals -= cost;
+    this.s.energy += CFG.crystalEnergyAmount;
+    this.record({ type: 'buyEnergy', t: now });
+    this.emit('change');
+    return { energy: CFG.crystalEnergyAmount, cost };
   }
 
   // ---- Tahta geometrisi ve element zinciri ----

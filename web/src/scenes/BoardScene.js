@@ -5,6 +5,7 @@
 import { CFG, ELEMENTS, ART, ELEMENT_COLOR, artKey } from '../config.js';
 import { blobName, formatNum } from '../i18n.js';
 import { haptic } from '../telegram.js';
+import { sfx } from '../sound.js';
 
 const P = window.Phaser;
 
@@ -347,6 +348,7 @@ export class BoardScene extends P.Scene {
   }
 
   wiggle(o) {
+    sfx.boop();
     haptic('light');
     this.tweens.add({
       targets: o.img,
@@ -399,6 +401,7 @@ export class BoardScene extends P.Scene {
     img.setAngle(0);
     this.tweens.add({ targets: img, scaleX: o.baseScale * 1.12, scaleY: o.baseScale * 1.12, duration: 90 });
     this.drawHighlights(o.cell);
+    sfx.pick();
     haptic('light');
   }
 
@@ -431,6 +434,7 @@ export class BoardScene extends P.Scene {
     if (res.type === 'none') {
       this.tweenTo(o, from);
     } else if (res.type === 'move') {
+      sfx.drop();
       this.objs[to] = o;
       this.objs[from] = null;
       o.cell = to;
@@ -445,6 +449,7 @@ export class BoardScene extends P.Scene {
         other.cell = from;
         this.tweenTo(other, from);
       }
+      sfx.drop();
       haptic('light');
     } else if (res.type === 'merge') {
       this.destroyBlob(this.objs[to]);
@@ -456,6 +461,7 @@ export class BoardScene extends P.Scene {
       const { x, y } = this.cellCenter(to);
       this.sparks.explode(res.discovered ? 40 : 22, x, y);
       this.floatText(x, y, blobName(res.blob.el, res.blob.lv), res.discovered ? '#FFC93C' : '#FFFFFF');
+      sfx.merge(res.blob.lv);
       haptic(res.discovered ? 'heavy' : 'medium');
       if (res.discovered) this.time.delayedCall(450, () => this.ui.discover(res.blob));
     }
@@ -495,6 +501,7 @@ export class BoardScene extends P.Scene {
         this.pop(o);
         this.sparks.explode(14, x, y);
         this.drawLinks();
+        sfx.hatch();
         haptic('medium');
         if (res.discovered) {
           this.floatText(x, y, blobName(blob.el, blob.lv), '#FFC93C');

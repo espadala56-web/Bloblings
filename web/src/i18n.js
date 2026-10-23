@@ -1,4 +1,4 @@
-// Metinler. Oyuncunun Telegram dili Türkçeyse Türkçe, değilse İngilizce gösterilir.
+// Metinler. Oyuncu ayarlardan dil seçmediyse Telegram dili Türkçeyse Türkçe, değilse İngilizce.
 
 import { ART } from './config.js';
 
@@ -46,6 +46,37 @@ const STRINGS = {
     lockedSlot: 'Kilitli yuva',
     offlineMode: 'Sunucuya bağlanılamadı. İlerlemen bu cihazda saklanıyor, bağlantı gelince gönderilecek.',
     sessionExpired: 'Oturum süresi doldu. İlerlemeni kaydetmek için oyunu kapatıp yeniden aç.',
+    settingsTitle: 'Ayarlar',
+    soundLabel: 'Ses efektleri',
+    hapticsLabel: 'Titreşim',
+    langLabel: 'Dil',
+    albumTitle: 'Albüm',
+    albumLabel: 'Albüm',
+    albumProgress: '{n}/{m} keşfedildi',
+    albumLocked: 'Henüz keşfedilmedi',
+    albumHowEgg: 'Yumurtadan çıkar.',
+    albumHowMerge: 'İki Lv{n} {el} canavarını birleştir.',
+    albumTap: 'Bir canavara dokun, hikâyesini oku.',
+    dailyTitle: 'Günlük ödül',
+    dailyLabel: 'Günlük ödül',
+    dailyBody: 'Her gün gel, serin büyüsün. 2 gün gelmezsen seri baştan başlar.',
+    dayN: '{n}. gün',
+    claim: 'Topla',
+    dailyNext: 'Sonraki ödül {t} sonra',
+    dailyGot: '{n}. gün ödülü alındı!',
+    rareEgg: 'Nadir yumurta',
+    energyTitle: 'Enerji',
+    energyBody: 'Her 5 dakikada 1 enerji dolar.',
+    energyNext: 'Sonraki enerji: {t}',
+    energyFullIn: 'Tamamen dolmasına {t}',
+    watchAd: 'Reklam izle',
+    adsLeft: 'Bugün {n} hakkın kaldı',
+    adsNone: 'Bugünlük reklam hakkın bitti, yarın yenilenir.',
+    energyAdded: '+{n} enerji!',
+    energyTip: 'Beklerken birleştirmeye devam et; canavarların altın üretmeyi sürdürür.',
+    needCrystals: '{n} kristal daha gerek.',
+    settingsLabel: 'Ayarlar',
+    durHM: '{h} sa {m} dk',
     fire: 'Ateş',
     water: 'Su',
     forest: 'Orman',
@@ -93,6 +124,37 @@ const STRINGS = {
     lockedSlot: 'Locked slot',
     offlineMode: 'Could not reach the server. Your progress is saved on this device and will sync later.',
     sessionExpired: 'Session expired. Close and reopen the game to keep saving your progress.',
+    settingsTitle: 'Settings',
+    soundLabel: 'Sound effects',
+    hapticsLabel: 'Vibration',
+    langLabel: 'Language',
+    albumTitle: 'Album',
+    albumLabel: 'Album',
+    albumProgress: '{n}/{m} discovered',
+    albumLocked: 'Not discovered yet',
+    albumHowEgg: 'Hatches from eggs.',
+    albumHowMerge: 'Merge two Lv{n} {el} blobs.',
+    albumTap: 'Tap a blob to read its story.',
+    dailyTitle: 'Daily reward',
+    dailyLabel: 'Daily reward',
+    dailyBody: 'Come back every day to grow your streak. Miss 2 days and it starts over.',
+    dayN: 'Day {n}',
+    claim: 'Claim',
+    dailyNext: 'Next reward in {t}',
+    dailyGot: 'Day {n} reward claimed!',
+    rareEgg: 'Rare egg',
+    energyTitle: 'Energy',
+    energyBody: 'You get 1 energy every 5 minutes.',
+    energyNext: 'Next energy in {t}',
+    energyFullIn: 'Full in {t}',
+    watchAd: 'Watch ad',
+    adsLeft: '{n} left today',
+    adsNone: 'No more ads today. Resets tomorrow.',
+    energyAdded: '+{n} energy!',
+    energyTip: 'Keep merging while you wait. Your blobs keep making gold.',
+    needCrystals: 'You need {n} more crystals.',
+    settingsLabel: 'Settings',
+    durHM: '{h}h {m}m',
     fire: 'Fire',
     water: 'Water',
     forest: 'Forest',
@@ -190,6 +252,13 @@ export function formatNum(n) {
   const v = Math.floor(n);
   if (v < 10000) return v.toLocaleString(locale());
   return new Intl.NumberFormat(locale(), { notation: 'compact', maximumFractionDigits: 1 }).format(v);
+}
+
+// Geri sayım: 1 saatten azsa 4:05, fazlaysa 5 sa 12 dk.
+export function formatClock(ms) {
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  if (s < 3600) return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  return t('durHM', { h: Math.floor(s / 3600), m: Math.floor((s % 3600) / 60) });
 }
 
 export function formatDuration(ms) {

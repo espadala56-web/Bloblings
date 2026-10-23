@@ -21,6 +21,27 @@ export const CFG = {
 
   saveEveryMs: 5000,
   startCrystals: 50,
+
+  // Reklam karşılığı enerji: günde en fazla 3 kez, her seferinde +10
+  adEnergyAmount: 10,
+  adEnergyPerDay: 3,
+  // Kristalle enerji: kristallerin ilk kullanım alanı (ileride Stars ile kristal satılacak)
+  crystalEnergyCost: 20,
+  crystalEnergyAmount: 10,
+
+  // Günlük giriş: 20 saatte bir alınabilir, 48 saat geçerse seri sıfırlanır
+  dailyMinGapMs: 20 * 60 * 60 * 1000,
+  dailyResetMs: 48 * 60 * 60 * 1000,
+  // gold: saniyelik gelirin kaç saniyelik karşılığı (en az 300)
+  dailyRewards: [
+    { energy: 10 },
+    { goldSec: 600 },
+    { crystals: 20 },
+    { energy: 20 },
+    { goldSec: 1800 },
+    { crystals: 40 },
+    { rareEgg: true },
+  ],
 };
 
 export const ELEMENTS = ['fire', 'water', 'forest'];

@@ -5,6 +5,8 @@ import { Store, setStorageKey, clockNow } from './store.js';
 import { BoardScene, boardSize } from './scenes/BoardScene.js';
 import { initTelegram, userLang, onHide, inTelegram, tgUserId, rawInitData } from './telegram.js';
 import { setLang, t } from './i18n.js';
+import { getPref } from './prefs.js';
+import { unlockAudio, suspendAudio } from './sound.js';
 import { createUI } from './ui.js';
 import { createSync, httpTransport } from './net.js';
 
@@ -13,7 +15,9 @@ const BG = '#1B1736';
 const SYNC_EVERY_MS = 15000;
 
 initTelegram(BG);
-setLang(userLang());
+setLang(getPref('lang') || userLang());
+// Tarayıcılar sesi ancak ilk dokunuştan sonra çalar.
+document.addEventListener('pointerdown', unlockAudio, { passive: true });
 
 // Her Telegram hesabının cihazdaki kaydı ayrı tutulur.
 const uid = tgUserId();
@@ -89,12 +93,14 @@ async function boot() {
   }, SYNC_EVERY_MS);
 
   onHide(() => {
+    suspendAudio();
     store.save();
     net.sync({ keepalive: true });
   });
   store.save();
 
   if (offline) setTimeout(() => ui.showWelcome(offline), 350);
+  setTimeout(() => ui.maybeShowDaily(), 500);
 
   // Test ve hata ayıklama için.
   window.__bloblings = { store, game, ui, net };

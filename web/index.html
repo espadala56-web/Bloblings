@@ -16,10 +16,11 @@
 <body>
 <div id="app">
   <header class="hud">
-    <div class="pill" data-i18n-label="energyLabel" aria-label="Energy">
+    <button id="energy-pill" type="button" class="pill pill-btn" data-i18n-label="energyLabel" aria-label="Energy">
       <span class="ico ico-energy" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z" fill="#4FD1E8" stroke="#0E3A44" stroke-width="1.5" stroke-linejoin="round"/></svg></span>
       <span class="pill-stack"><b id="energy-val">30/30</b><small id="energy-sub"></small></span>
-    </div>
+      <span class="plus" aria-hidden="true">+</span>
+    </button>
     <div class="pill" data-i18n-label="goldLabel" aria-label="Gold">
       <span class="ico ico-gold" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#FFC93C" stroke="#9A6A00" stroke-width="2"/><circle cx="12" cy="12" r="5" fill="none" stroke="#C98A00" stroke-width="2"/></svg></span>
       <b id="gold-val">0</b>
@@ -28,9 +29,22 @@
       <span class="ico ico-crystal" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24"><path d="M12 2l8 7-8 13-8-13z" fill="#FF6FB5" stroke="#8C1F57" stroke-width="1.5" stroke-linejoin="round"/></svg></span>
       <b id="crystal-val">0</b>
     </div>
+    <button id="settings-btn" type="button" class="icon-btn" data-i18n-label="settingsLabel" aria-label="Settings">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#B8B0DD" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </button>
   </header>
 
-  <div class="rate"><span data-i18n="perSec">Per second</span> <b id="rate-val"></b></div>
+  <div class="subbar">
+    <div class="rate"><span data-i18n="perSec">Per second</span> <b id="rate-val"></b></div>
+    <button id="album-btn" type="button" class="chip" data-i18n-label="albumLabel" aria-label="Album">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFC93C" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/><path d="M12 7.5l1.2 2.4 2.6.4-1.9 1.8.5 2.6-2.4-1.3-2.4 1.3.5-2.6-1.9-1.8 2.6-.4z" fill="#FFC93C" stroke="none"/></svg>
+      <span id="album-val">0/15</span>
+    </button>
+    <button id="daily-btn" type="button" class="chip chip-gift" data-i18n-label="dailyLabel" aria-label="Daily reward">
+      <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="9" width="18" height="12" rx="2.5" fill="#FF6FB5" stroke="#1A1430" stroke-width="1.8"/><rect x="2" y="6.5" width="20" height="4.5" rx="1.8" fill="#FF8CC6" stroke="#1A1430" stroke-width="1.8"/><path d="M12 6.5V21" stroke="#FFC93C" stroke-width="3"/><path d="M12 6.5c-1.5-3.5-5.5-4-5.5-1.5S10 6.5 12 6.5zm0 0c1.5-3.5 5.5-4 5.5-1.5S14 6.5 12 6.5z" fill="#FFC93C" stroke="#1A1430" stroke-width="1.5"/></svg>
+      <span class="dot" aria-hidden="true"></span>
+    </button>
+  </div>
 
   <main class="board-wrap"><div id="game"></div></main>
 

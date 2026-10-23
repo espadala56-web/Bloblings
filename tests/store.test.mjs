@@ -93,4 +93,43 @@ g.s.board[0] = { el: 'forest', lv: 1 }; g.s.board[1] = { el: 'water', lv: 1 };
 assert.ok(Math.abs(g.goldRate() - 2.25) < 1e-9);
 assert.equal(g.unlockSlot(t0).cell, 16);
 assert.equal(g.upgradeEgg(t0).error, 'gold');
+
+// 9) Günlük ödül: 20 saatte bir, 48 saati geçerse seri sıfırlanır, 7. gün nadir yumurta
+const H = 3600_000;
+const d = mk(base);
+assert.equal(d.dailyStatus(t0).ready, true);
+let dr = d.claimDaily(t0 + 1000);
+assert.equal(dr.day, 1); assert.equal(dr.energy, 10); assert.equal(d.s.energy, 40); // sınırı aşabilir
+assert.equal(d.claimDaily(t0 + 2 * H).error, 'wait');
+assert.equal(d.claimDaily(t0 + 21 * H).day, 2);
+assert.equal(d.claimDaily(t0 + 42 * H).day, 3);
+assert.equal(d.claimDaily(t0 + 100 * H).day, 1, '48 saatten fazla ara seriyi sıfırlar');
+const d7 = mk({ ...base, daily: { streak: 6, lastAt: t0 } });
+dr = d7.claimDaily(t0 + 21 * H);
+assert.equal(dr.day, 7); assert.equal(dr.blob.lv, 2); assert.ok(d7.s.board[dr.cell]);
+assert.equal(d7.claimDaily(t0 + 42 * H).day, 1, '7. günden sonra döngü başa döner');
+// sunucu da aynı sonuca varır, bekleme süresi dolmadan gelen istek reddedilir
+const dsv = replay(clone({ ...base, daily: { streak: 6, lastAt: t0 } }), clone(d7.pending), t0 + 43 * H, t0 + 42 * H);
+assert.equal(dsv.rejected, 0); assert.deepEqual(dsv.state.board, d7.s.board); assert.equal(dsv.state.daily.streak, 1);
+const dcheat = replay(clone(base), [{ seq: 1, type: 'daily', t: t0 + 1000 }, { seq: 2, type: 'daily', t: t0 + 2000 }], t0 + 3000, t0 + 3000);
+assert.equal(dcheat.applied, 1); assert.equal(dcheat.rejected, 1);
+
+// 10) Reklamla enerji: UTC gününde en fazla 3 kez
+const e = mk({ ...base, energy: 0, energyAt: t0 });
+for (let i = 0; i < CFG.adEnergyPerDay; i++) assert.equal(e.adEnergy(t0 + 1000 + i).energy, CFG.adEnergyAmount);
+assert.equal(e.adEnergy(t0 + 2000).error, 'limit');
+assert.equal(e.adEnergyLeft(t0 + 2000), 0);
+assert.equal(e.adEnergyLeft(t0 + 24 * H), CFG.adEnergyPerDay, 'ertesi gün hak yenilenir');
+assert.equal(e.s.energy, CFG.adEnergyAmount * CFG.adEnergyPerDay);
+const echeat = replay(clone({ ...base, energy: 0, energyAt: t0 }), [1, 2, 3, 4, 5].map((n) => ({ seq: n, type: 'adEnergy', t: t0 + n })), t0 + 3000, t0 + 3000);
+assert.equal(echeat.applied, 3); assert.equal(echeat.rejected, 2);
+
+// 11) Kristalle enerji
+const k = mk({ ...base, energy: 0, energyAt: t0, crystals: 45 });
+assert.equal(k.buyEnergy(t0 + 1).energy, CFG.crystalEnergyAmount);
+assert.equal(k.buyEnergy(t0 + 2).energy, CFG.crystalEnergyAmount);
+assert.equal(k.buyEnergy(t0 + 3).error, 'crystals');
+assert.equal(k.s.crystals, 5);
+const ksv = replay(clone({ ...base, energy: 0, energyAt: t0, crystals: 45 }), [1, 2, 3].map((n) => ({ seq: n, type: 'buyEnergy', t: t0 + n })), t0 + 3000, t0 + 3000);
+assert.equal(ksv.applied, 2); assert.equal(ksv.rejected, 1); assert.equal(ksv.state.crystals, 5);
 console.log('Tüm kural testleri geçti ✔  (telefon = sunucu, hileler reddedildi)');
