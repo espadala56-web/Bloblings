@@ -1,9 +1,9 @@
-// Tahta sahnesi: yuvalar, canavarlar, sürükle-bırak ve birleştirme efektleri.
+// Tahta sahnesi: yuvalar, canavarlar, sürükle-bırak, element köprüleri ve efektler.
 // Koordinatlar tasarım boyutunun 2 katıdır (U = 2); Phaser ekrana sığdırırken küçültür,
 // böylece yüksek çözünürlüklü telefonlarda görüntü keskin kalır.
 
-import { CFG, ELEMENTS, ART, artKey } from '../config.js';
-import { blobName, t } from '../i18n.js';
+import { CFG, ELEMENTS, ART, ELEMENT_COLOR, artKey } from '../config.js';
+import { blobName, formatNum } from '../i18n.js';
 import { haptic } from '../telegram.js';
 
 const P = window.Phaser;
@@ -16,15 +16,21 @@ const BLOB = 74 * U;
 const RADIUS = 18 * U;
 const BADGE_W = 34 * U;
 const BADGE_H = 17 * U;
+// Canavar görseli ayak hizasından çizilir; nefes alırken yukarı doğru esner.
+const IMG_DY = BLOB * 0.47 - 2 * U;
 
 const COLORS = {
   panel: 0x2a2550,
   panelEdge: 0x3d3670,
   slot: 0x352f63,
   slotEdge: 0x463f7a,
+  locked: 0x221e45,
+  lockedEdge: 0x3a3368,
   gold: 0xffc93c,
   ink: 0x1a1430,
 };
+
+const FONT = 'Fredoka, Nunito, system-ui, sans-serif';
 
 export function boardSize() {
   return {
@@ -54,13 +60,23 @@ export class BoardScene extends P.Scene {
 
   create() {
     this.makeTextures();
-    this.drawBoard();
+    this.drawPanel();
+    this.slotG = [];
+    this.lockObjs = [];
+    for (let i = 0; i < CFG.cols * CFG.rows; i++) {
+      this.slotG[i] = this.add.graphics().setDepth(1);
+      this.lockObjs[i] = null;
+      this.drawSlot(i);
+    }
+    this.links = this.add.graphics().setDepth(3);
+    this.tweens.add({ targets: this.links, alpha: { from: 0.65, to: 1 }, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     this.highlight = this.add.graphics().setDepth(5);
 
     this.objs = new Array(this.store.s.board.length).fill(null);
     this.store.s.board.forEach((b, i) => {
       if (b) this.objs[i] = this.createBlob(i, b);
     });
+    this.drawLinks();
 
     this.sparks = this.add
       .particles(0, 0, 'spark', {
@@ -82,34 +98,96 @@ export class BoardScene extends P.Scene {
     this.ui.attachScene(this);
   }
 
-  // ---- Görsel yardımcılar ----
+  // ---- Dokular ----
 
   makeTextures() {
     const g = this.add.graphics();
     g.fillStyle(0xffffff, 1);
     g.fillCircle(8, 8, 8);
     g.generateTexture('spark', 16, 16);
+
     g.clear();
     g.fillStyle(COLORS.ink, 1);
     g.fillRoundedRect(0, 0, BADGE_W, BADGE_H, 8 * U);
     g.generateTexture('badge', BADGE_W, BADGE_H);
+
+    // Asma kilit
+    g.clear();
+    const L = 24 * U;
+    g.lineStyle(3.5 * U, 0x8a82bd, 1);
+    g.beginPath();
+    g.arc(L / 2, 10 * U, 6 * U, Math.PI, 0, false);
+    g.strokePath();
+    g.fillStyle(0x8a82bd, 1);
+    g.fillRoundedRect(2 * U, 10 * U, L - 4 * U, 13 * U, 3 * U);
+    g.fillStyle(COLORS.locked, 1);
+    g.fillCircle(L / 2, 16 * U, 2 * U);
+    g.generateTexture('lock', L, 24 * U);
+
+    // Küçük altın simgesi
+    g.clear();
+    g.fillStyle(0xffc93c, 1);
+    g.fillCircle(8 * U, 8 * U, 7 * U);
+    g.lineStyle(1.6 * U, 0xc98a00, 1);
+    g.strokeCircle(8 * U, 8 * U, 4 * U);
+    g.generateTexture('coin', 16 * U, 16 * U);
     g.destroy();
   }
 
-  drawBoard() {
+  // ---- Tahta çizimi ----
+
+  drawPanel() {
     const { w, h } = boardSize();
     const g = this.add.graphics().setDepth(0);
     g.fillStyle(COLORS.panel, 1);
     g.fillRoundedRect(0, 0, w, h, 24 * U);
     g.lineStyle(2, COLORS.panelEdge, 1);
     g.strokeRoundedRect(1, 1, w - 2, h - 2, 24 * U);
-    for (let i = 0; i < CFG.cols * CFG.rows; i++) {
-      const r = this.cellRect(i);
-      g.fillStyle(COLORS.slot, 1);
-      g.fillRoundedRect(r.x, r.y, r.w, r.h, RADIUS);
-      g.lineStyle(4, COLORS.slotEdge, 1);
-      g.strokeRoundedRect(r.x, r.y, r.w, r.h, RADIUS);
+  }
+
+  drawSlot(i) {
+    const g = this.slotG[i];
+    const r = this.cellRect(i);
+    g.clear();
+    const open = this.store.isOpen(i);
+    g.fillStyle(open ? COLORS.slot : COLORS.locked, 1);
+    g.fillRoundedRect(r.x, r.y, r.w, r.h, RADIUS);
+    g.lineStyle(4, open ? COLORS.slotEdge : COLORS.lockedEdge, 1);
+    g.strokeRoundedRect(r.x, r.y, r.w, r.h, RADIUS);
+
+    if (this.lockObjs[i]) {
+      this.lockObjs[i].forEach((o) => o.destroy());
+      this.lockObjs[i] = null;
     }
+    if (open) return;
+
+    const { x, y } = this.cellCenter(i);
+    const isNext = i === this.store.s.slotsOpen;
+    const objs = [];
+    const lock = this.add.image(x, isNext ? y - 14 * U : y, 'lock').setDepth(2).setAlpha(isNext ? 1 : 0.55);
+    objs.push(lock);
+    if (isNext) {
+      const cost = this.store.nextSlotCost();
+      const label = this.add
+        .text(x + 9 * U, y + 18 * U, formatNum(cost), { fontFamily: FONT, fontSize: `${13 * U}px`, fontStyle: 'bold', color: '#FFC93C' })
+        .setOrigin(0.5)
+        .setDepth(2);
+      const coin = this.add.image(label.x - label.width / 2 - 9 * U, label.y, 'coin').setDepth(2);
+      objs.push(label, coin);
+    }
+    const zone = this.add.zone(x, y, TILE, TILE).setInteractive({ useHandCursor: true }).setDepth(2);
+    zone.on('pointerup', () => this.ui.tryUnlock());
+    objs.push(zone);
+    this.lockObjs[i] = objs;
+  }
+
+  onSlotUnlocked(cell) {
+    for (let i = cell; i < CFG.cols * CFG.rows; i++) this.drawSlot(i);
+    const { x, y } = this.cellCenter(cell);
+    this.sparks.explode(26, x, y);
+    const g = this.slotG[cell];
+    g.setAlpha(0);
+    this.tweens.add({ targets: g, alpha: 1, duration: 300 });
   }
 
   cellRect(i) {
@@ -123,7 +201,6 @@ export class BoardScene extends P.Scene {
     return { x: r.x + r.w / 2, y: r.y + r.h / 2 };
   }
 
-  // Parmağın altındaki yuva. Yuvalar arası boşluğun yarısı da sayılır, bırakmak kolay olsun.
   cellAt(x, y) {
     for (let i = 0; i < CFG.cols * CFG.rows; i++) {
       const r = this.cellRect(i);
@@ -134,19 +211,44 @@ export class BoardScene extends P.Scene {
     return -1;
   }
 
+  // ---- Element köprüleri ----
+
+  drawLinks() {
+    const g = this.links;
+    g.clear();
+    for (const [from, to] of this.store.synergyLinks()) {
+      const a = this.cellCenter(from);
+      const b = this.cellCenter(to);
+      const color = ELEMENT_COLOR[this.store.s.board[from].el];
+      const mx = (a.x + b.x) / 2;
+      const my = (a.y + b.y) / 2;
+      const horiz = a.y === b.y;
+      const len = GAP + 26 * U;
+      const thick = 12 * U;
+      g.fillStyle(COLORS.ink, 1);
+      if (horiz) g.fillRoundedRect(mx - len / 2 - 2 * U, my - thick / 2 - 2 * U, len + 4 * U, thick + 4 * U, (thick + 4 * U) / 2);
+      else g.fillRoundedRect(mx - thick / 2 - 2 * U, my - len / 2 - 2 * U, thick + 4 * U, len + 4 * U, (thick + 4 * U) / 2);
+      g.fillStyle(color, 1);
+      if (horiz) g.fillRoundedRect(mx - len / 2, my - thick / 2, len, thick, thick / 2);
+      else g.fillRoundedRect(mx - thick / 2, my - len / 2, thick, len, thick / 2);
+      // Akış yönünü gösteren küçük ok
+      const s = 4 * U;
+      const dx = Math.sign(b.x - a.x);
+      const dy = Math.sign(b.y - a.y);
+      g.fillStyle(0xffffff, 0.95);
+      if (horiz) g.fillTriangle(mx + dx * s, my, mx - dx * s, my - s, mx - dx * s, my + s);
+      else g.fillTriangle(mx, my + dy * s, mx - s, my - dy * s, mx + s, my - dy * s);
+    }
+  }
+
   // ---- Canavar nesneleri ----
 
   createBlob(i, b) {
     const { x, y } = this.cellCenter(i);
-    const img = this.add.image(0, 0, artKey(b.el, b.lv)).setDisplaySize(BLOB, BLOB).setDepth(10);
+    const img = this.add.image(0, 0, artKey(b.el, b.lv)).setDisplaySize(BLOB, BLOB).setOrigin(0.5, 0.97).setDepth(10);
     const badge = this.add.image(0, 0, 'badge').setDepth(11);
     const label = this.add
-      .text(0, 0, `Lv${b.lv}`, {
-        fontFamily: 'Fredoka, Nunito, system-ui, sans-serif',
-        fontSize: `${11 * U}px`,
-        fontStyle: 'bold',
-        color: '#F5F1FF',
-      })
+      .text(0, 0, `Lv${b.lv}`, { fontFamily: FONT, fontSize: `${11 * U}px`, fontStyle: 'bold', color: '#F5F1FF' })
       .setOrigin(0.5)
       .setDepth(12);
     const o = { img, badge, label, cell: i, cx: x, cy: y, baseScale: img.scaleX, dragging: false, justDragged: false };
@@ -156,13 +258,14 @@ export class BoardScene extends P.Scene {
     img.on('pointerup', () => {
       if (!o.dragging && !o.justDragged) this.wiggle(o);
     });
+    this.breathe(o);
     return o;
   }
 
   placeAt(o, x, y) {
     o.cx = x;
     o.cy = y;
-    o.img.setPosition(x, y - 2 * U);
+    o.img.setPosition(x, y + IMG_DY);
     const bx = x + TILE / 2 - BADGE_W / 2 - 5 * U;
     const by = y + TILE / 2 - BADGE_H / 2 - 5 * U;
     o.badge.setPosition(bx, by);
@@ -177,9 +280,27 @@ export class BoardScene extends P.Scene {
 
   destroyBlob(o) {
     if (!o) return;
+    this.tweens.killTweensOf(o.img);
     o.img.destroy();
     o.badge.destroy();
     o.label.destroy();
+  }
+
+  // Hafif nefes alma: her canavar kendi ritminde.
+  breathe(o) {
+    const s = o.baseScale;
+    this.tweens.killTweensOf(o.img);
+    o.img.setScale(s).setAngle(0);
+    this.tweens.add({
+      targets: o.img,
+      scaleY: s * 1.045,
+      scaleX: s * 0.975,
+      duration: 900 + Math.random() * 500,
+      delay: Math.random() * 700,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
   }
 
   tweenTo(o, cell, duration = 170) {
@@ -198,19 +319,27 @@ export class BoardScene extends P.Scene {
 
   pop(o) {
     const s = o.baseScale;
+    this.tweens.killTweensOf(o.img);
     o.img.setScale(s * 0.35);
-    this.tweens.add({ targets: o.img, scaleX: s, scaleY: s, duration: 320, ease: 'Back.easeOut' });
+    this.tweens.add({ targets: o.img, scaleX: s, scaleY: s, duration: 320, ease: 'Back.easeOut', onComplete: () => this.breathe(o) });
   }
 
   wiggle(o) {
     haptic('light');
-    this.tweens.add({ targets: o.img, angle: { from: -9, to: 9 }, duration: 70, yoyo: true, repeat: 2, onComplete: () => o.img.setAngle(0) });
+    this.tweens.add({
+      targets: o.img,
+      angle: { from: -9, to: 9 },
+      duration: 70,
+      yoyo: true,
+      repeat: 2,
+      onComplete: () => o.img.setAngle(0),
+    });
   }
 
   floatText(x, y, text, color = '#FFFFFF') {
     const txt = this.add
       .text(x, y - 30 * U, text, {
-        fontFamily: 'Fredoka, Nunito, system-ui, sans-serif',
+        fontFamily: FONT,
         fontSize: `${15 * U}px`,
         fontStyle: 'bold',
         color,
@@ -244,6 +373,8 @@ export class BoardScene extends P.Scene {
     if (!o) return;
     o.dragging = true;
     this.setDepths(o, 100);
+    this.tweens.killTweensOf(img);
+    img.setAngle(0);
     this.tweens.add({ targets: img, scaleX: o.baseScale * 1.12, scaleY: o.baseScale * 1.12, duration: 90 });
     this.drawHighlights(o.cell);
     haptic('light');
@@ -252,9 +383,8 @@ export class BoardScene extends P.Scene {
   onDrag(pointer, img, dragX, dragY) {
     const o = img.getData('o');
     if (!o) return;
-    this.placeAt(o, dragX, dragY + 2 * U);
-    const hover = this.cellAt(pointer.worldX, pointer.worldY);
-    this.drawHighlights(o.cell, hover);
+    this.placeAt(o, dragX, dragY - IMG_DY);
+    this.drawHighlights(o.cell, this.cellAt(pointer.worldX, pointer.worldY));
   }
 
   onDragEnd(pointer, img) {
@@ -266,27 +396,28 @@ export class BoardScene extends P.Scene {
       o.justDragged = false;
     }, 0);
     this.highlight.clear();
-    this.tweens.add({ targets: img, scaleX: o.baseScale, scaleY: o.baseScale, duration: 90 });
 
     const from = o.cell;
     const to = this.cellAt(pointer.worldX, pointer.worldY);
     const res = to >= 0 ? this.store.drop(from, to) : { type: 'none' };
 
-    if (res.type === 'none') {
+    if (res.type !== 'merge') {
       this.setDepths(o, 10);
+      this.breathe(o);
+    }
+
+    if (res.type === 'none') {
       this.tweenTo(o, from);
     } else if (res.type === 'move') {
       this.objs[to] = o;
       this.objs[from] = null;
       o.cell = to;
-      this.setDepths(o, 10);
       this.tweenTo(o, to, 110);
     } else if (res.type === 'swap') {
       const other = this.objs[to];
       this.objs[to] = o;
       this.objs[from] = other;
       o.cell = to;
-      this.setDepths(o, 10);
       this.tweenTo(o, to, 110);
       if (other) {
         other.cell = from;
@@ -301,14 +432,12 @@ export class BoardScene extends P.Scene {
       this.objs[to] = n;
       this.pop(n);
       const { x, y } = this.cellCenter(to);
-      this.sparks.explode(22, x, y);
+      this.sparks.explode(res.discovered ? 40 : 22, x, y);
       this.floatText(x, y, blobName(res.blob.el, res.blob.lv), res.discovered ? '#FFC93C' : '#FFFFFF');
       haptic(res.discovered ? 'heavy' : 'medium');
-      if (res.discovered) {
-        this.ui.toast(t('newDiscovery', { name: blobName(res.blob.el, res.blob.lv) }));
-        haptic('success');
-      }
+      if (res.discovered) this.time.delayedCall(450, () => this.ui.discover(res.blob));
     }
+    this.drawLinks();
     this.ui.refresh();
   }
 
@@ -338,14 +467,14 @@ export class BoardScene extends P.Scene {
         o.img.setVisible(true);
         o.badge.setVisible(true);
         o.label.setVisible(true);
-        o.img.setAngle(0);
         o.img.setInteractive({ draggable: true, useHandCursor: true });
         this.pop(o);
         this.sparks.explode(14, x, y);
+        this.drawLinks();
         haptic('medium');
         if (res.discovered) {
           this.floatText(x, y, blobName(blob.el, blob.lv), '#FFC93C');
-          this.ui.toast(t('newDiscovery', { name: blobName(blob.el, blob.lv) }));
+          this.time.delayedCall(350, () => this.ui.discover(blob));
         }
       },
     });

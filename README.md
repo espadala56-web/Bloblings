@@ -56,9 +56,14 @@ Sonra tarayıcıda `http://localhost:8080` aç. Telegram dışında da çalış�
 - [x] Tahta: sürükle-birleştir, yumurta, enerji, saniyelik altın
 - [x] Çevrimdışı kazanç ve "2 katını al" penceresi (reklam test modunda)
 - [x] Türkçe / İngilizce
+- [x] Evrimler: Ejderha, Deniz Ejderi, Kütükdev, Orman Ruhu (her element 5 seviye)
+- [x] Element zinciri: Su ormanı, orman ateşi, ateş suyu besler (+%25 / komşu)
+- [x] Altın harcama: kilitli yuvalar, yumurta kalitesi
+- [x] Keşif kartları ve canlı (nefes alan) canavarlar
 - [ ] Supabase: oyuncu kaydı, Telegram doğrulaması, sunucu tarafı ekonomi
-- [ ] Albüm ekranı ve keşifler
+- [ ] Albüm ekranı
 - [ ] Füzyon ve hediye yumurtası (arkadaş daveti)
 - [ ] Adsgram ödüllü reklam (sunucu doğrulamalı)
 - [ ] Telegram Stars mağazası ve Kâşif Pası
 - [ ] Günlük giriş serisi, görevler, bildirimler
+- [ ] Ses efektleri

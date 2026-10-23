@@ -104,6 +104,40 @@ html, body {
   font-weight: 600;
 }
 
+.btn-up {
+  position: relative;
+  width: 68px;
+  height: 68px;
+  flex: none;
+  background: var(--cyan);
+  border: 3px solid var(--ink);
+  border-bottom-width: 7px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.06s ease, border-bottom-width 0.06s ease;
+}
+.btn-up:active { transform: translateY(3px); border-bottom-width: 4px; }
+.btn-up:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+.btn-up .dot {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--pink);
+  border: 3px solid var(--ink);
+  display: none;
+}
+.btn-up.has-dot .dot { display: block; }
+@media (prefers-reduced-motion: no-preference) {
+  .btn-up.has-dot { animation: nudge 1.6s ease-in-out infinite; }
+  @keyframes nudge { 0%, 80%, 100% { transform: rotate(0); } 85% { transform: rotate(-8deg); } 90% { transform: rotate(8deg); } 95% { transform: rotate(-4deg); } }
+}
+
 .toast {
   position: absolute;
   left: 50%;
@@ -170,3 +204,53 @@ html, body {
 .btn:disabled { opacity: 0.6; cursor: default; }
 .btn-ad { background: var(--cyan); color: #0d2b33; border: 3px solid var(--ink); border-bottom-width: 6px; }
 .btn-ghost { background: transparent; color: var(--text); border: 2px solid #4a4285; font-size: 16px; min-height: 48px; }
+.btn-primary { background: var(--gold); color: var(--ink); border: 3px solid var(--ink); border-bottom-width: 6px; }
+
+/* Keşif kartı */
+.discover { gap: 8px; }
+.discover .tag { background: var(--pink); color: var(--ink); font-weight: 800; font-size: 13px; border-radius: 999px; padding: 4px 12px; }
+.discover-img { width: 168px; height: 168px; }
+.discover .meta { font-family: var(--font-display); font-weight: 600; font-size: 15px; color: var(--muted); }
+.discover .flavor { font-style: italic; color: #e6e0ff; margin-bottom: 4px; }
+@media (prefers-reduced-motion: no-preference) {
+  .discover-img { animation: reveal 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+  @keyframes reveal { from { transform: scale(0.3) rotate(-10deg); opacity: 0; } to { transform: scale(1) rotate(0); opacity: 1; } }
+}
+
+/* Geliştirmeler paneli */
+.sheet { gap: 10px; text-align: left; align-items: stretch; }
+.sheet h2 { text-align: center; }
+.up-row { display: flex; align-items: center; gap: 12px; background: var(--bg); border-radius: 18px; padding: 10px 12px; }
+.up-row img, .up-lock { width: 44px; height: 44px; flex: none; display: flex; align-items: center; justify-content: center; }
+.up-text { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.up-text b { font-size: 15px; }
+.up-text small { font-size: 12px; color: var(--muted); font-weight: 700; line-height: 1.35; }
+.btn-buy {
+  flex: none;
+  min-width: 92px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  background: var(--gold);
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  border-bottom-width: 4px;
+  border-radius: 12px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 10px;
+}
+.btn-buy.cant { background: #4a4285; color: #cfc8ee; }
+.btn-buy:disabled { background: #2f6b4a; color: #c9f5df; cursor: default; }
+.btn-buy:focus-visible { outline: 3px solid var(--cyan); outline-offset: 2px; }
+.synergy-box { display: flex; flex-direction: column; gap: 6px; border: 2px dashed #4a4285; border-radius: 18px; padding: 10px 12px; }
+.synergy-box b { font-size: 15px; }
+.synergy-box small { font-size: 12px; color: var(--muted); font-weight: 700; line-height: 1.4; }
+.chain { display: flex; align-items: center; justify-content: center; gap: 4px; }
+.chain img { width: 40px; height: 40px; }
+.chain span { color: var(--muted); font-weight: 800; }
+.modal-card { max-height: 100%; overflow-y: auto; }

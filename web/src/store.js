@@ -2,9 +2,10 @@
 // Not: Şimdilik cihazda (localStorage) saklanır. Supabase'e geçince
 // enerji, altın ve birleştirmeler sunucuda doğrulanacak.
 
-import { CFG, ELEMENTS, rateOf } from './config.js';
+import { CFG, ELEMENTS, FED_BY, rateOf } from './config.js';
 
 const KEY = 'bloblings:v1';
+const VERSION = 2;
 
 function freshState(now) {
   const board = new Array(CFG.cols * CFG.rows).fill(null);
@@ -13,8 +14,9 @@ function freshState(now) {
   board[6] = { el: 'fire', lv: 1 };
   board[10] = { el: 'water', lv: 1 };
   return {
-    v: 1,
+    v: VERSION,
     board,
+    slotsOpen: CFG.startOpen,
     energy: CFG.energyCap,
     energyAt: now,
     gold: 0,
@@ -26,13 +28,26 @@ function freshState(now) {
   };
 }
 
+// Eski kayıtları yeni sürüme taşır. Oyuncunun ilerlemesi kaybolmaz.
+export function migrate(s) {
+  if (!s || !Array.isArray(s.board)) return null;
+  if (s.v === 1) {
+    // v1: 4x4 tahta. v2: 4x5 tahta, son sıra kilitli.
+    while (s.board.length < CFG.cols * CFG.rows) s.board.push(null);
+    s.slotsOpen = CFG.startOpen;
+    s.v = 2;
+  }
+  if (s.v !== VERSION) return null;
+  if (typeof s.eggQuality !== 'number') s.eggQuality = 0;
+  if (!s.stats) s.stats = { merges: 0, eggs: 0 };
+  return s;
+}
+
 function readStorage() {
   try {
     const raw = globalThis.localStorage && globalThis.localStorage.getItem(KEY);
     if (!raw) return null;
-    const s = JSON.parse(raw);
-    if (!s || s.v !== 1 || !Array.isArray(s.board)) return null;
-    return s;
+    return migrate(JSON.parse(raw));
   } catch (e) {
     return null;
   }
@@ -41,7 +56,7 @@ function readStorage() {
 export class Store extends EventTarget {
   constructor(now = Date.now(), initial = undefined) {
     super();
-    this.s = initial || readStorage() || freshState(now);
+    this.s = (initial && migrate(initial)) || readStorage() || freshState(now);
     this.syncEnergy(now);
     this.lastSaveAt = now;
   }
@@ -76,16 +91,58 @@ export class Store extends EventTarget {
     }
   }
 
-  // Bir sonraki enerjiye kalan süre (ms). Enerji doluysa 0.
   nextEnergyIn(now = Date.now()) {
     if (this.s.energy >= CFG.energyCap) return 0;
     return Math.max(0, CFG.energyRegenMs - (now - this.s.energyAt));
   }
 
+  // ---- Tahta geometrisi ----
+  isOpen(i) {
+    return i >= 0 && i < this.s.slotsOpen;
+  }
+
+  neighbors(i) {
+    const c = i % CFG.cols;
+    const r = Math.floor(i / CFG.cols);
+    const out = [];
+    if (c > 0) out.push(i - 1);
+    if (c < CFG.cols - 1) out.push(i + 1);
+    if (r > 0) out.push(i - CFG.cols);
+    if (r < CFG.rows - 1) out.push(i + CFG.cols);
+    return out;
+  }
+
+  // i'deki canavarı besleyen komşuların listesi.
+  feedersOf(i) {
+    const b = this.s.board[i];
+    if (!b) return [];
+    const want = FED_BY[b.el];
+    return this.neighbors(i).filter((j) => {
+      const n = this.s.board[j];
+      return n && n.el === want;
+    });
+  }
+
+  // Görsel köprüler için: [besleyen, beslenen] çiftleri.
+  synergyLinks() {
+    const links = [];
+    this.s.board.forEach((b, i) => {
+      if (!b) return;
+      for (const j of this.feedersOf(i)) links.push([j, i]);
+    });
+    return links;
+  }
+
   // ---- Altın ----
+  blobRate(i) {
+    const b = this.s.board[i];
+    if (!b) return 0;
+    return rateOf(b.lv) * (1 + CFG.synergyBonus * this.feedersOf(i).length);
+  }
+
   goldRate() {
     let r = 0;
-    for (const b of this.s.board) if (b) r += rateOf(b.lv);
+    for (let i = 0; i < this.s.board.length; i++) r += this.blobRate(i);
     return r;
   }
 
@@ -93,7 +150,6 @@ export class Store extends EventTarget {
     this.s.gold += (this.goldRate() * dtMs) / 1000;
   }
 
-  // Çevrimdışı kazanç raporu. Gösterildikten sonra collectOffline ile alınır.
   offlineReport(now = Date.now()) {
     const away = Math.max(0, now - this.s.lastSeen);
     if (away < CFG.offlineMinMs) return null;
@@ -111,12 +167,48 @@ export class Store extends EventTarget {
     return amount;
   }
 
+  // ---- Geliştirmeler ----
+  nextSlotCost() {
+    const k = this.s.slotsOpen - CFG.startOpen;
+    return k < CFG.slotCosts.length ? CFG.slotCosts[k] : null;
+  }
+
+  unlockSlot() {
+    const cost = this.nextSlotCost();
+    if (cost === null) return { error: 'max' };
+    if (this.s.gold < cost) return { error: 'gold', need: Math.ceil(cost - this.s.gold) };
+    this.s.gold -= cost;
+    const cell = this.s.slotsOpen;
+    this.s.slotsOpen += 1;
+    this.emit('change');
+    return { cell, cost };
+  }
+
+  nextEggCost() {
+    const q = this.s.eggQuality;
+    return q < CFG.eggCosts.length ? CFG.eggCosts[q] : null;
+  }
+
+  upgradeEgg() {
+    const cost = this.nextEggCost();
+    if (cost === null) return { error: 'max' };
+    if (this.s.gold < cost) return { error: 'gold', need: Math.ceil(cost - this.s.gold) };
+    this.s.gold -= cost;
+    this.s.eggQuality += 1;
+    this.emit('change');
+    return { level: this.s.eggQuality + 1, cost };
+  }
+
+  canAffordUpgrade() {
+    const a = this.nextSlotCost();
+    const b = this.nextEggCost();
+    return (a !== null && this.s.gold >= a) || (b !== null && this.s.gold >= b);
+  }
+
   // ---- Tahta ----
   emptyCells() {
     const out = [];
-    this.s.board.forEach((b, i) => {
-      if (!b) out.push(i);
-    });
+    for (let i = 0; i < this.s.slotsOpen; i++) if (!this.s.board[i]) out.push(i);
     return out;
   }
 
@@ -137,10 +229,17 @@ export class Store extends EventTarget {
     return Boolean(a !== b && A && B && A.el === B.el && A.lv === B.lv);
   }
 
+  markDiscovered(blob) {
+    const key = `${blob.el}-${blob.lv}`;
+    const isNew = !this.s.discovered[key];
+    this.s.discovered[key] = true;
+    return isNew;
+  }
+
   // Sürükle-bırak sonucunu uygular: taşı, yer değiştir ya da birleştir.
   drop(from, to) {
     const board = this.s.board;
-    if (from === to || to < 0 || to >= board.length || !board[from]) return { type: 'none' };
+    if (from === to || !this.isOpen(to) || !board[from]) return { type: 'none' };
     const A = board[from];
     const B = board[to];
     if (!B) {
@@ -154,11 +253,9 @@ export class Store extends EventTarget {
       board[to] = merged;
       board[from] = null;
       this.s.stats.merges += 1;
-      const key = `${merged.el}-${merged.lv}`;
-      const isNew = !this.s.discovered[key];
-      this.s.discovered[key] = true;
+      const discovered = this.markDiscovered(merged);
       this.emit('change');
-      return { type: 'merge', blob: merged, discovered: isNew };
+      return { type: 'merge', blob: merged, discovered };
     }
     board[to] = A;
     board[from] = B;
@@ -180,10 +277,8 @@ export class Store extends EventTarget {
     const blob = { el, lv: 1 + this.s.eggQuality };
     this.s.board[cell] = blob;
     this.s.stats.eggs += 1;
-    const key = `${el}-${blob.lv}`;
-    const isNew = !this.s.discovered[key];
-    this.s.discovered[key] = true;
+    const discovered = this.markDiscovered(blob);
     this.emit('change');
-    return { cell, blob, discovered: isNew };
+    return { cell, blob, discovered };
   }
 }

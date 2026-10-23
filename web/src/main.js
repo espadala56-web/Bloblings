@@ -30,6 +30,7 @@ async function fontsReady(ms = 1500) {
 async function boot() {
   await fontsReady();
   const { w, h } = boardSize();
+  document.getElementById('game').style.aspectRatio = `${w} / ${h}`;
   const game = new P.Game({
     type: P.AUTO,
     parent: 'game',
