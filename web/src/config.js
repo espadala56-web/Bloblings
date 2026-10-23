@@ -32,6 +32,7 @@ export const CFG = {
   // Hediye yumurtası: davet eden ve davet edilen arkadaşa
   giftCrystals: 20, // arkadaş hediyesiyle gelen ek kristal
   referralMerges: 10, // davet edilen bu kadar birleştirme yapınca davet edene hediye gider
+  channelReward: 10, // Telegram kanalına ilk katılışta bir kez verilen kristal
 
   // Günlük giriş: 20 saatte bir alınabilir, 48 saat geçerse seri sıfırlanır
   dailyMinGapMs: 20 * 60 * 60 * 1000,

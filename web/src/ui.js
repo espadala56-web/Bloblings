@@ -2,7 +2,7 @@
 
 import { CFG, ELEMENTS, ART, artKey, HYBRIDS, HYBRID_LIST, HYBRID_START, RECIPE_LV, isHybrid } from './config.js';
 import { t, formatNum, formatDuration, formatClock, getLang, setLang, blobName, blobFlavor } from './i18n.js';
-import { haptic, setBackButton, inviteLink, shareLink, copyText, tgUserId } from './telegram.js';
+import { haptic, setBackButton, inviteLink, shareLink, copyText, tgUserId, CHANNEL_URL, openTgLink } from './telegram.js';
 import { makeGold } from './gold.js';
 import { showRewarded, adsDebug } from './ads.js';
 import { sfx } from './sound.js';
@@ -647,6 +647,7 @@ export function createUI(store) {
         switchRow(t('soundLabel'), 'sound', (on) => on && sfx.tap()),
         switchRow(t('hapticsLabel'), 'haptics', (on) => on && haptic('medium')),
         h('div', { class: 'set-row' }, [h('b', { text: t('langLabel') }), seg]),
+        channelButton(),
         h('span', { class: 'version', text: adsDebug() ? `${VERSION_LABEL} · ads debug` : VERSION_LABEL, style: 'text-align:center' }),
         h('button', { type: 'button', class: 'btn btn-ghost', text: t('close'), onclick: close }),
       ]);
@@ -685,6 +686,35 @@ export function createUI(store) {
     });
   }
 
+  // ---- Telegram kanalı ----
+  // İlk katılışta bir kez kristal verir; sonra sadece kanalı açar.
+  function channelButton(cls = 'btn btn-crystal') {
+    if (!CHANNEL_URL) return null;
+    const btn = h('button', { type: 'button', class: cls });
+    const paint = () => {
+      const first = !store.s.flags.channel;
+      btn.innerHTML = '';
+      btn.append(h('span', { text: first ? t('channelJoin') : t('channelGo') }));
+      if (first) btn.insertAdjacentHTML('beforeend', `<span>· +${CFG.channelReward}</span>${crystalSvg(18)}`);
+    };
+    paint();
+    btn.addEventListener('click', () => {
+      sfx.tap();
+      haptic('light');
+      openTgLink(CHANNEL_URL);
+      if (!store.s.flags.channel) {
+        const res = store.joinChannel();
+        if (!res.error) {
+          sfx.coins();
+          toast(t('crystalsAdded', { n: res.crystals }));
+        }
+      }
+      paint();
+      refresh();
+    });
+    return btn;
+  }
+
   // ---- Arkadaş daveti ----
   function openInvite() {
     openModal((close) => {
@@ -716,6 +746,7 @@ export function createUI(store) {
         hasUser ? h('div', { class: 'invite-link', text: link }) : h('p', { class: 'small-note', text: t('inviteNoUser') }),
         share,
         copy,
+        channelButton(),
         h('button', { type: 'button', class: 'btn btn-ghost', text: t('close'), onclick: close }),
       ]);
     });

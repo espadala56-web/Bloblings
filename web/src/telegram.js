@@ -60,6 +60,22 @@ export function rawInitData() {
   return tg ? tg.initData : '';
 }
 
+// Oyunun Telegram kanalı. Boşsa kanal butonları gizlenir.
+export const CHANNEL_URL = '';
+
+// t.me linklerini Telegram içinde açar (kanala katılma vb.).
+export function openTgLink(url) {
+  try {
+    if (tg && atLeast('6.1') && tg.openTelegramLink) {
+      tg.openTelegramLink(url);
+      return;
+    }
+  } catch (e) {
+    /* aşağıya düş */
+  }
+  window.open(url, '_blank');
+}
+
 // Davet linki: t.me/BloblingsBot/play?startapp=r_<telegramId>
 export const BOT_LINK = 'https://t.me/BloblingsBot/play';
 

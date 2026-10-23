@@ -190,4 +190,11 @@ assert.equal(gf.s.crystals - cr0, CFG.giftCrystals); assert.equal(gf.s.stats.fri
 const gsv = replay(clone({ ...base, inbox: [{ id: 'inv', kind: 'invited', name: 'Ali' }] }), [{ seq: 1, type: 'gift', id: 'inv', t: t0 + 1 }, { seq: 2, type: 'gift', id: 'inv', t: t0 + 2 }, { seq: 3, type: 'gift', id: 'fake', t: t0 + 3 }], t0 + 10, t0 + 10);
 assert.equal(gsv.applied, 1); assert.equal(gsv.rejected, 2); assert.equal(gsv.state.inbox.length, 0);
 
+// 16) Kanal ödülü bir kez
+const ch = mk(base);
+assert.equal(ch.joinChannel(t0 + 1).crystals, CFG.channelReward);
+assert.equal(ch.joinChannel(t0 + 2).error, 'done');
+const chsv = replay(clone(base), [1, 2].map((n) => ({ seq: n, type: 'channel', t: t0 + n })), t0 + 10, t0 + 10);
+assert.equal(chsv.applied, 1); assert.equal(chsv.rejected, 1); assert.equal(chsv.state.crystals, CFG.startCrystals + CFG.channelReward);
+
 console.log('Tüm kural testleri geçti ✔  (telefon = sunucu, hileler reddedildi)');

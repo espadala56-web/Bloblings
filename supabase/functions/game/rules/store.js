@@ -65,6 +65,7 @@ export function freshState(now, seed = newSeed()) {
     ads: { day: '', energy: 0 },
     inbox: [], // sunucunun koyduğu hediyeler: { id, kind: 'invited' | 'friend', name }
     giftSeen: {}, // aynı hediye iki kez gelmesin
+    flags: {}, // tek seferlik ödüller (ör. kanal)
   };
 }
 
@@ -98,6 +99,7 @@ export function migrate(s, now = clockNow()) {
   if (!s.ads) s.ads = { day: '', energy: 0 };
   if (!Array.isArray(s.inbox)) s.inbox = [];
   if (!s.giftSeen || typeof s.giftSeen !== 'object') s.giftSeen = {};
+  if (!s.flags || typeof s.flags !== 'object') s.flags = {};
   return s;
 }
 
@@ -192,6 +194,9 @@ export class Store extends EventTarget {
         break;
       case 'gift':
         res = this.claimGift(String((a && a.id) || ''), t);
+        break;
+      case 'channel':
+        res = this.joinChannel(t);
         break;
       default:
         res = { error: 'unknown' };
@@ -357,6 +362,18 @@ export class Store extends EventTarget {
     this.record({ type: 'gift', id, t: now });
     this.emit('change');
     return out;
+  }
+
+  // ---- Telegram kanalı: ilk katılışta bir kez kristal ----
+  // Not: katılım Telegram'dan doğrulanmaz (bot anahtarı gerektirir); ödül küçük ve tek seferlik.
+  joinChannel(now = clockNow()) {
+    this.advance(now);
+    if (this.s.flags.channel) return { error: 'done' };
+    this.s.flags.channel = true;
+    this.s.crystals += CFG.channelReward;
+    this.record({ type: 'channel', t: now });
+    this.emit('change');
+    return { crystals: CFG.channelReward };
   }
 
   // ---- Reklam karşılığı enerji ----
