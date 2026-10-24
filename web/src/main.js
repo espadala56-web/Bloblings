@@ -47,7 +47,7 @@ ui.attachNet(net);
 async function fontsReady(ms = 1500) {
   if (!document.fonts || !document.fonts.load) return;
   await Promise.race([
-    Promise.all([document.fonts.load('700 24px Fredoka'), document.fonts.load('700 16px Nunito')]),
+    Promise.all([document.fonts.load('700 24px "Baloo 2"'), document.fonts.load('700 16px Nunito')]),
     new Promise((r) => setTimeout(r, ms)),
   ]).catch(() => {});
 }

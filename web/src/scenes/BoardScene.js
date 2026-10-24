@@ -32,7 +32,7 @@ const COLORS = {
   ink: 0x1a1430,
 };
 
-const FONT = 'Fredoka, Nunito, system-ui, sans-serif';
+const FONT = '"Baloo 2", Nunito, system-ui, sans-serif';
 
 export function boardSize() {
   return {

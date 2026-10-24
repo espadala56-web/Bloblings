@@ -890,7 +890,7 @@ export function createUI(store) {
 
   function wheelIcon(p) {
     const ic = (name) => `<svg x="-13" y="-27" width="26" height="26" viewBox="0 0 24 24">${ICONS[name]}</svg>`;
-    const label = (txt) => `<text y="15" text-anchor="middle" font-family="Fredoka, Nunito, sans-serif" font-weight="700" font-size="15" fill="#1A1430">${txt}</text>`;
+    const label = (txt) => `<text y="15" text-anchor="middle" font-family="'Baloo 2', Nunito, sans-serif" font-weight="700" font-size="15" fill="#1A1430">${txt}</text>`;
     if (p.goldSec) return ic('coin') + label(`${Math.round(p.goldSec / 60)}${t('minShort')}`);
     if (p.crystals) return ic('crystal') + label(p.crystals);
     if (p.energy) return ic('energy') + label(p.energy);
