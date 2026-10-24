@@ -152,7 +152,7 @@ export function createUI(store) {
     const empty = store.emptyCells().length;
     if (s.stats.merges === 0 && store.hasMergePair()) return t('hintFirstMerge');
     if (s.stats.merges > 0 && store.canAffordUpgrade()) return t('hintUpgrade');
-    if (empty === 0 && !store.hasMergePair()) return t('hintBoardFull');
+    if (empty === 0 && !store.hasMergePair()) return hasRecipePair() && !s.stats.recipes ? t('hintRecipe') : t('hintBoardFull');
     if (s.energy < CFG.eggCost && empty > 0) return t('hintNoEnergy');
     if (s.stats.eggs === 0 && empty > 0) return t('hintOpenEgg');
     if (s.stats.merges >= 1 && store.synergyLinks().length === 0) return t('hintSynergy');
@@ -170,6 +170,48 @@ export function createUI(store) {
   // Dost canavarlar seviyeden bağımsız tek kart: herhangi bir seviyesi bulunduysa açılmıştır.
   function palKnown(e) {
     return Object.keys(store.s.discovered).some((k) => k.startsWith(`${e}-`) && !k.endsWith('*'));
+  }
+
+  // Oyuncunun bildiği hamlelere göre tahta kilitli mi (keşfedilmemiş gizli tarifler sayılmaz).
+  function stuck() {
+    if (store.emptyCells().length > 0) return false;
+    const n = store.s.slotsOpen;
+    for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) if (store.canMerge(i, j) || store.knowsRecipe(i, j)) return false;
+    return true;
+  }
+
+  // Artık eşi gelmeyecek küçük canavarlar: yumurta seviyesinin altında, tek başına kalmış temel canavarlar.
+  function orphanCells() {
+    const eggLv = 1 + store.s.eggQuality;
+    const b = store.s.board;
+    const out = [];
+    for (let i = 0; i < store.s.slotsOpen; i++) {
+      const x = b[i];
+      if (!x || x.shiny || !ELEMENTS.includes(x.el) || x.lv >= eggLv) continue;
+      if (x.lv === RECIPE_LV) continue; // gizli tarif için işe yarayabilir
+      const twin = b.some((y, j) => j !== i && y && y.el === x.el && y.lv === x.lv);
+      if (!twin) out.push(i);
+    }
+    return out;
+  }
+
+  function sellOrphans() {
+    let gold = 0;
+    let count = 0;
+    for (const i of orphanCells()) {
+      const res = store.sell(i);
+      if (res.error) continue;
+      gold += res.gold;
+      count += 1;
+      if (scene) scene.removeAt(i);
+    }
+    if (count) {
+      sfx.coins();
+      haptic('success');
+      toast(t('soldSmall', { n: count, g: formatNum(gold) }), 2600);
+    }
+    refresh();
+    return count;
   }
 
   function albumCount() {
@@ -211,7 +253,7 @@ export function createUI(store) {
       return;
     }
     // Tahta kilitlendiyse kurtarma penceresi (her kilitlenmede bir kez).
-    const locked = store.isLocked();
+    const locked = stuck();
     if (locked && !lockShown) {
       lockShown = true;
       openLocked();
@@ -250,7 +292,7 @@ export function createUI(store) {
     } else if (res.error === 'full') {
       sfx.error();
       haptic('warning');
-      if (store.isLocked()) openLocked();
+      if (stuck() || orphanCells().length) openLocked();
       else toast(t('boardFull'));
     } else {
       sfx.egg();
@@ -813,13 +855,26 @@ export function createUI(store) {
         haptic('success');
         toast(r.test ? `${t('potionGot')} (test)` : t('potionGot'), 3200);
       });
+      const orphans = orphanCells();
+      let sellSmall = null;
+      if (orphans.length) {
+        const value = orphans.reduce((a, i) => a + store.sellValue(i), 0);
+        sellSmall = h('button', { type: 'button', class: 'btn btn-primary', html: `<span></span>${COIN_SVG}` });
+        sellSmall.querySelector('span').textContent = t('sellSmall', { n: orphans.length, g: formatNum(value) });
+        sellSmall.addEventListener('click', () => {
+          close();
+          sellOrphans();
+        });
+      }
       return h('div', { class: 'modal-card', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'lock-title' }, [
         h('div', { class: 'energy-big', html: potionSvg(40), style: 'background:#2f2457' }),
         h('h2', { id: 'lock-title', text: t('lockedTitle') }),
         h('p', { text: t('lockedBody') }),
         store.s.potions > 0 ? h('p', { class: 'small-note', text: t('lockedHasPotion', { n: store.s.potions }), style: 'color:#C7B3FF' }) : null,
+        orphans.length ? h('p', { class: 'small-note', text: t('orphanNote', { lv: 1 + store.s.eggQuality }) }) : null,
+        sellSmall,
         store.adPotionLeft() > 0 ? adBtn : null,
-        h('button', { type: 'button', class: 'btn btn-primary', text: t('ok'), onclick: close }),
+        h('button', { type: 'button', class: sellSmall ? 'btn btn-ghost' : 'btn btn-primary', text: t('ok'), onclick: close }),
       ]);
     });
   }
