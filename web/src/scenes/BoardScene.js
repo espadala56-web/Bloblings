@@ -328,7 +328,12 @@ export class BoardScene extends P.Scene {
     img.setInteractive({ draggable: true, useHandCursor: true });
     img.setData('o', o);
     img.on('pointerup', () => {
-      if (!o.dragging && !o.justDragged) this.wiggle(o);
+      if (o.dragging || o.justDragged) return;
+      this.wiggle(o);
+      // Dokununca canavar kartı: sat ya da Sihirli İksir kullan.
+      this.time.delayedCall(140, () => {
+        if (o.img.scene) this.ui.blobInfo(o.cell);
+      });
     });
     this.breathe(o);
     return o;
@@ -534,6 +539,37 @@ export class BoardScene extends P.Scene {
     this.drawLinks();
     this.ui.refresh();
     if (this.needsRebuild) this.rebuild();
+  }
+
+  isDragging() {
+    return Boolean(this.objs && this.objs.some((o) => o && o.dragging));
+  }
+
+  // Satılan canavar küçülerek kaybolur.
+  removeAt(cell) {
+    const o = this.objs[cell];
+    if (!o) return;
+    this.objs[cell] = null;
+    const { x, y } = this.cellCenter(cell);
+    this.sparks.explode(16, x, y);
+    o.badge.setVisible(false);
+    o.label.setVisible(false);
+    o.fx.forEach((f) => f.setVisible(false));
+    this.tweens.killTweensOf(o.img);
+    this.tweens.add({ targets: o.img, scaleX: 0, scaleY: 0, duration: 200, ease: 'Back.easeIn', onComplete: () => this.destroyBlob(o) });
+    this.drawLinks();
+  }
+
+  // İksirle seviye atlayan canavar yenisiyle değişir.
+  replaceAt(cell, blob) {
+    if (this.objs[cell]) this.destroyBlob(this.objs[cell]);
+    const n = this.createBlob(cell, blob);
+    this.objs[cell] = n;
+    this.pop(n);
+    const { x, y } = this.cellCenter(cell);
+    this.sparks.explode(30, x, y);
+    this.floatText(x, y, blobName(blob.el, blob.lv), '#C7B3FF');
+    this.drawLinks();
   }
 
   // ---- Yumurtadan çıkış ----

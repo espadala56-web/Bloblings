@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { Store, migrate, rng } from '../web/src/store.js';
+import { Store, migrate, rng, weekId, questsFor, utcDay } from '../web/src/store.js';
 import { replay, loadOnServer, newPlayerState } from '../web/src/sync.js';
 import { CFG, rateOf, artKey, topLevel, hybridOf, HYBRID_MULT, SHINY_MULT } from '../web/src/config.js';
 
@@ -196,5 +196,105 @@ assert.equal(ch.joinChannel(t0 + 1).crystals, CFG.channelReward);
 assert.equal(ch.joinChannel(t0 + 2).error, 'done');
 const chsv = replay(clone(base), [1, 2].map((n) => ({ seq: n, type: 'channel', t: t0 + n })), t0 + 10, t0 + 10);
 assert.equal(chsv.applied, 1); assert.equal(chsv.rejected, 1); assert.equal(chsv.state.crystals, CFG.startCrystals + CFG.channelReward);
+
+// 17) Satış ve iksir
+const sl = mk({ ...base, board: new Array(20).fill(null), gold: 0, potions: 0 });
+sl.s.board[0] = { el: 'fire', lv: 3 }; sl.s.board[1] = { el: 'water', lv: 2, shiny: true };
+assert.equal(sl.sellValue(0), Math.floor(rateOf(3) * CFG.sellSeconds));
+const sr = sl.sell(0, t0 + 10);
+assert.equal(sr.gold, Math.floor(rateOf(3) * CFG.sellSeconds)); assert.equal(sl.s.board[0], null);
+assert.equal(sl.sell(0, t0 + 11).error, 'none');
+assert.equal(sl.usePotion(1, t0 + 12).error, 'potions');
+for (let i = 0; i < CFG.adPotionPerDay; i++) assert.ok(!sl.adPotion(t0 + 20 + i).error);
+assert.equal(sl.adPotion(t0 + 30).error, 'limit');
+const pr = sl.usePotion(1, t0 + 40);
+assert.deepEqual(pr.blob, { el: 'water', lv: 3, shiny: true }); assert.equal(sl.s.potions, CFG.adPotionPerDay - 1);
+const slStart = { ...base, board: (() => { const b = new Array(20).fill(null); b[0] = { el: 'fire', lv: 3 }; b[1] = { el: 'water', lv: 2, shiny: true }; return b; })(), gold: 0, potions: 0 };
+const slsv = replay(clone(slStart), clone(sl.pending), t0 + 100, t0 + 50);
+assert.equal(slsv.rejected, 0); assert.deepEqual(slsv.state.board, sl.s.board); assert.equal(slsv.state.potions, sl.s.potions);
+// kilit tespiti
+const lk = mk({ ...base, board: new Array(20).fill(null) });
+for (let i = 0; i < 16; i++) lk.s.board[i] = { el: ['fire', 'water', 'forest'][i % 3], lv: 4 + Math.floor(i / 3) };
+assert.equal(lk.isLocked(), true);
+lk.s.board[15] = { el: 'fire', lv: 4 };
+assert.equal(lk.isLocked(), false);
+
+// 18) Şans çarkı: günde 1 bedava + 5 reklam, sonuç telefon = sunucu
+const wh = mk({ ...base, board: new Array(20).fill(null) });
+const whStart = clone(wh.s);
+assert.equal(wh.wheelStatus(t0).free, true);
+const w1 = wh.spin(t0 + 1, false);
+assert.ok(w1.slot >= 0 && w1.slot < CFG.wheel.length);
+assert.equal(wh.spin(t0 + 2, false).error, 'used');
+for (let i = 0; i < CFG.wheelAdPerDay; i++) assert.ok(!wh.spin(t0 + 3 + i, true).error);
+assert.equal(wh.spin(t0 + 20, true).error, 'limit');
+assert.equal(wh.wheelStatus(t0 + 24 * H).free, true, 'ertesi gün bedava çevirme yenilenir');
+const whsv = replay(clone(whStart), clone(wh.pending), t0 + 100, t0 + 30);
+assert.equal(whsv.rejected, 0); assert.equal(whsv.state.crystals, wh.s.crystals); assert.equal(whsv.state.potions, wh.s.potions); assert.deepEqual(whsv.state.board, wh.s.board);
+const whcheat = replay(clone(whStart), [1, 2].map((n) => ({ seq: n, type: 'spin', t: t0 + n })), t0 + 10, t0 + 10);
+assert.equal(whcheat.applied, 1); assert.equal(whcheat.rejected, 1);
+// dağılım: çok çevirmede her dilim çıkar
+const seen = new Set();
+const wd = mk({ ...base, board: new Array(20).fill(null) });
+for (let d = 0; d < 120; d++) { const r = wd.spin(t0 + d * 24 * H, false); seen.add(r.slot); wd.s.board.fill(null); }
+assert.equal(seen.size, CFG.wheel.length, 'her dilim çıkabilmeli');
+
+// 19) Günlük görevler
+const qd = utcDay(t0);
+const q1 = questsFor(12345, qd), q2 = questsFor(12345, qd);
+assert.deepEqual(q1, q2); assert.equal(q1.ids.length, 3);
+assert.equal(new Set(q1.ids.map((i) => CFG.quests[i].k)).size, 3, 'görev türleri farklı');
+const qs = mk({ ...base, board: new Array(20).fill(null), energy: 30 });
+const qsStart = clone(qs.s);
+const view = qs.questState(t0);
+assert.equal(view.length, 3); assert.equal(qs.s.quests, null, 'ekrana bakmak durumu değiştirmez');
+// oynadıkça sayaçlar artar; sunucu aynı sayaçlara ulaşır
+for (let k = 0; k < 6; k++) qs.openEgg(t0 + 100 + k);
+qs.s.board.fill(null); qs.s.board[0] = { el: 'fire', lv: 1 }; qs.s.board[1] = { el: 'fire', lv: 1 };
+const qsStart2 = clone(qs.s); const pend0 = qs.pending.length;
+qs.drop(0, 1, t0 + 200);
+assert.equal(qs.s.quests.prog.eggs, 6); assert.equal(qs.s.quests.prog.merges, 1);
+const qssv = replay(clone(qsStart), clone(qs.pending.slice(0, pend0)), t0 + 1000, t0 + 150);
+assert.equal(qssv.state.quests.prog.eggs, 6);
+const qssv2 = replay(clone(qsStart2), clone(qs.pending.slice(pend0)), t0 + 1000, t0 + 250);
+assert.equal(qssv2.state.quests.prog.merges, 1);
+// doğrudan sayaç doldurup ödül al
+const qf = mk({ ...base });
+const qv = qf.questState(t0);
+qf.ensureQuests(qd); for (const x of qv) qf.s.quests.prog[x.k] = x.n;
+const c0q = qf.s.crystals;
+for (const x of qv) assert.equal(qf.claimQuest(x.i, t0 + 1).crystals, x.r);
+assert.equal(qf.claimQuest(0, t0 + 2).error, 'none');
+assert.equal(qf.s.crystals - c0q, qv.reduce((a, x) => a + x.r, 0));
+assert.equal(qf.questBonusReady(t0 + 3), true);
+const qb = qf.claimQuestBonus(t0 + 3);
+assert.equal(qb.potion, 1); assert.equal(qf.claimQuestBonus(t0 + 4).error, 'none');
+assert.equal(qf.questState(t0 + 24 * H).every((x) => !x.done), true, 'ertesi gün yeni görevler');
+// sunucu sayaçları kendi hesaplar: ilerleme olmadan ödül alınamaz
+const qcheat = replay(clone(base), [{ seq: 1, type: 'quest', from: 0, t: t0 + 1 }, { seq: 2, type: 'questBonus', t: t0 + 2 }], t0 + 10, t0 + 10);
+assert.equal(qcheat.applied, 0); assert.equal(qcheat.rejected, 2);
+
+// 20) Dost canavarlar: 1., 3. ve 5. arkadaşta özel canavar
+const pf = mk({ ...base, board: new Array(20).fill(null), inbox: [1, 2, 3, 4, 5].map((n) => ({ id: 'f' + n, kind: 'friend', name: 'A' + n })) });
+const pals = [];
+for (let n = 1; n <= 5; n++) { const r = pf.claimGift('f' + n, t0 + n); pals.push(r.blob.el); }
+assert.deepEqual(pals, ['pal1', 'fire', 'pal2', pals[3], 'pal3'].map((x, i) => (i === 1 || i === 3 ? pals[i] : x)));
+assert.equal(pals[0], 'pal1'); assert.equal(pals[2], 'pal2'); assert.equal(pals[4], 'pal3');
+assert.ok(!['pal1', 'pal2', 'pal3'].includes(pals[1]));
+assert.equal(pf.s.stats.friends, 5);
+const palCell = pf.s.board.findIndex((b) => b && b.el === 'pal1');
+assert.ok(Math.abs(pf.blobRate(palCell) - rateOf(3) * 2 * (1 + CFG.synergyBonus * pf.feedersOf(palCell).length)) < 1e-9);
+// tahta doluyken dost canavar beklemede kalır
+const pfull = mk({ ...base, board: new Array(20).fill(null).map((_, i) => (i < 16 ? { el: 'fire', lv: 1 + i } : null)), inbox: [{ id: 'f9', kind: 'friend', name: 'Z' }] });
+assert.equal(pfull.claimGift('f9', t0 + 1).error, 'full'); assert.equal(pfull.s.inbox.length, 1);
+
+// 21) Haftalık puan
+assert.equal(weekId(Date.UTC(2026, 9, 24)), '2026-W43');
+assert.equal(weekId(Date.UTC(2026, 9, 26)), '2026-W44'); // pazartesi
+assert.equal(weekId(Date.UTC(2027, 0, 1)), '2026-W53');
+assert.equal(weekId(Date.UTC(2026, 0, 1)), '2026-W01');
+const wk = mk(base);
+wk.advance(t0 + 10_000);
+assert.equal(wk.s.week.id, weekId(t0 + 10_000)); assert.ok(Math.abs(wk.s.week.earned - wk.s.gold) < 1e-6);
 
 console.log('Tüm kural testleri geçti ✔  (telefon = sunucu, hileler reddedildi)');

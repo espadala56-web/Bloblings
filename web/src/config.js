@@ -34,6 +34,38 @@ export const CFG = {
   referralMerges: 10, // davet edilen bu kadar birleştirme yapınca davet edene hediye gider
   channelReward: 10, // Telegram kanalına ilk katılışta bir kez verilen kristal
 
+  // Satış ve Sihirli İksir
+  sellSeconds: 30, // bir canavar satılınca kaç saniyelik üretimi kadar altın verir
+  sellMin: 10,
+  adPotionPerDay: 5, // reklamla günde en fazla kaç iksir
+
+  // Şans çarkı: günde 1 bedava, reklamla en fazla 5 ekstra
+  wheelAdPerDay: 5,
+  // Dilimler (sırası çarktaki yerleriyle aynı). w: ağırlık
+  wheel: [
+    { goldSec: 300, min: 300, w: 22 },
+    { crystals: 5, w: 18 },
+    { energy: 10, w: 16 },
+    { goldSec: 1200, min: 1500, w: 12 },
+    { potion: 1, w: 12 },
+    { crystals: 20, w: 8 },
+    { energy: 25, w: 8 },
+    { rareEgg: true, w: 4 },
+  ],
+
+  // Günlük görevler: her gün bu havuzdan 3 farklı tür seçilir
+  quests: [
+    { k: 'merges', n: 10, r: 10 },
+    { k: 'merges', n: 25, r: 20 },
+    { k: 'eggs', n: 8, r: 10 },
+    { k: 'eggs', n: 20, r: 20 },
+    { k: 'spins', n: 1, r: 10 },
+    { k: 'sells', n: 2, r: 10 },
+    { k: 'discover', n: 1, r: 15 },
+    { k: 'potions', n: 1, r: 15 },
+  ],
+  questBonusCrystals: 10, // üç görev de bitince: +1 iksir ve bu kadar kristal
+
   // Günlük giriş: 20 saatte bir alınabilir, 48 saat geçerse seri sıfırlanır
   dailyMinGapMs: 20 * 60 * 60 * 1000,
   dailyResetMs: 48 * 60 * 60 * 1000,
@@ -63,8 +95,18 @@ export const SHINY_CHANCE = 0.03; // yumurtadan parlak çıkma ihtimali
 export const SHINY_CHANCE_RARE = 0.1; // nadir/hediye yumurtada
 export const SHINY_MULT = 2;
 
+// Dost canavarlar: sadece arkadaş davetiyle gelir (1., 3. ve 5. arkadaşta).
+export const PALS = ['pal1', 'pal2', 'pal3'];
+export const PAL_AT = { 1: 'pal1', 3: 'pal2', 5: 'pal3' };
+export const PAL_NEED = { pal1: 1, pal2: 3, pal3: 5 };
+export const PAL_MULT = 2; // dost canavarlar 2 kat altın üretir
+
 // Her element için çizilmiş aşama sayısı. Karışımların 3 aşaması var (Lv4, Lv5, Lv6+).
-export const ART = { fire: 10, water: 10, forest: 10, steam: 3, lotus: 3, autumn: 3 };
+export const ART = { fire: 10, water: 10, forest: 10, steam: 3, lotus: 3, autumn: 3, pal1: 1, pal2: 1, pal3: 1 };
+
+export function isPal(el) {
+  return PALS.includes(el);
+}
 
 export function isHybrid(el) {
   return Object.prototype.hasOwnProperty.call(HYBRIDS, el);
@@ -81,6 +123,7 @@ export function hybridOf(a, b) {
 
 // Albümde ve isimlerde: bir element için çizimi olan en yüksek seviye.
 export function topLevel(el) {
+  if (isPal(el)) return Infinity; // dost canavarların tek çizimi var, isimlerine +N eklenmez
   return isHybrid(el) ? HYBRID_START + ART[el] - 1 : ART[el] || 1;
 }
 
@@ -95,13 +138,14 @@ export const FED_BY = {
   autumn: ['forest', 'fire'],
 };
 
-export const ELEMENT_COLOR = { fire: 0xff7a45, water: 0x4fb6ff, forest: 0x5fcf6a, steam: 0xb49bff, lotus: 0x3cc8b4, autumn: 0xff9f43 };
+export const ELEMENT_COLOR = { fire: 0xff7a45, water: 0x4fb6ff, forest: 0x5fcf6a, steam: 0xb49bff, lotus: 0x3cc8b4, autumn: 0xff9f43, pal1: 0xff6fb5, pal2: 0xffc93c, pal3: 0x8fe0ff };
 
 export function rateOf(lv) {
   return CFG.baseRate * Math.pow(CFG.rateMult, lv - 1);
 }
 
 export function artKey(el, lv) {
+  if (isPal(el)) return `${el}-1`;
   if (isHybrid(el)) return `${el}-${Math.max(1, Math.min(lv - HYBRID_START + 1, ART[el]))}`;
   return `${el}-${Math.max(1, Math.min(lv, ART[el] || 1))}`;
 }

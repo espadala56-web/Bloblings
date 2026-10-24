@@ -41,6 +41,7 @@ const net = createSync(store, {
     },
   },
 });
+ui.attachNet(net);
 
 // Yazı tipi gelmeden Phaser yazı çizerse yedek font kullanır; kısa bir süre bekle.
 async function fontsReady(ms = 1500) {

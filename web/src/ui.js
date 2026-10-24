@@ -1,6 +1,7 @@
 // HTML arayüz katmanı: üst bilgi çubuğu, ipucu, butonlar, bildirimler ve pencereler.
 
-import { CFG, ELEMENTS, ART, artKey, HYBRIDS, HYBRID_LIST, HYBRID_START, RECIPE_LV, isHybrid } from './config.js';
+import { CFG, ELEMENTS, ART, artKey, HYBRIDS, HYBRID_LIST, HYBRID_START, RECIPE_LV, isHybrid, PALS, PAL_NEED, PAL_MULT, isPal } from './config.js';
+import { utcDay, clockNow } from './store.js';
 import { t, formatNum, formatDuration, formatClock, getLang, setLang, blobName, blobFlavor } from './i18n.js';
 import { haptic, setBackButton, inviteLink, shareLink, copyText, tgUserId, CHANNEL_URL, openTgLink } from './telegram.js';
 import { makeGold } from './gold.js';
@@ -43,9 +44,22 @@ function albumLevels(el) {
   if (isHybrid(el)) return Array.from({ length: ART[el] }, (_, i) => HYBRID_START + i);
   return Array.from({ length: ART[el] }, (_, i) => i + 1);
 }
-const ALBUM_ELS = [...ELEMENTS, ...HYBRID_LIST];
+const ALBUM_ELS = [...ELEMENTS, ...HYBRID_LIST, ...PALS];
 const ALBUM_TOTAL = ALBUM_ELS.reduce((n, el) => n + ART[el], 0);
-const ELEMENT_CSS = { fire: '#FF9A6B', water: '#7CC8FF', forest: '#7FDB88', steam: '#C7B3FF', lotus: '#6FE0D0', autumn: '#FFB86B' };
+const ELEMENT_CSS = { fire: '#FF9A6B', water: '#7CC8FF', forest: '#7FDB88', steam: '#C7B3FF', lotus: '#6FE0D0', autumn: '#FFB86B', pals: '#FF8FC0' };
+const potionSvg = (n = 18) =>
+  `<svg width="${n}" height="${n}" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2.5h6M10 2.5v5L5.2 16a4.6 4.6 0 0 0 4 6.5h5.6a4.6 4.6 0 0 0 4-6.5L14 7.5v-5" fill="#B49BFF" stroke="#1A1430" stroke-width="1.8" stroke-linejoin="round"/><path d="M7 15.5h10" stroke="#E2D8FF" stroke-width="1.6"/><circle cx="10.5" cy="18" r="1.2" fill="#fff"/></svg>`;
+
+// Bir sonraki UTC gece yarısı ve pazartesi (görev ve haftalık sıralama yenilenmesi).
+function msToUtcMidnight(now) {
+  const d = new Date(now);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1) - now;
+}
+function msToMonday(now) {
+  const d = new Date(now);
+  const dow = (d.getUTCDay() + 6) % 7;
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 7 - dow) - now;
+}
 
 export function createUI(store) {
   const el = {
@@ -59,6 +73,9 @@ export function createUI(store) {
     albumVal: $('album-val'),
     dailyBtn: $('daily-btn'),
     inviteBtn: $('invite-btn'),
+    questsBtn: $('quests-btn'),
+    wheelBtn: $('wheel-btn'),
+    topBtn: $('top-btn'),
     settingsBtn: $('settings-btn'),
     hint: $('hint'),
     eggBtn: $('egg-btn'),
@@ -67,7 +84,10 @@ export function createUI(store) {
     modal: $('modal'),
   };
   let scene = null;
+  let net = null;
   let toastTimer = null;
+  let lockShown = false; // tahta kilitlenince pencere bir kez çıksın
+  const giftSnooze = new Set(); // tahta dolu diye bekletilen hediyeler
 
   function applyI18n() {
     document.querySelectorAll('[data-i18n]').forEach((node) => {
@@ -94,6 +114,8 @@ export function createUI(store) {
     entry.close = () => {
       if (current === entry) closeModal();
     };
+    // Pencere açıkken tahta dokunuşları dinlemesin: butona basmak alttaki yuvayı/canavarı tetiklemesin.
+    if (scene) scene.input.enabled = false;
     el.modal.innerHTML = '';
     const card = build(entry.close);
     entry.update = card.update || null;
@@ -112,6 +134,10 @@ export function createUI(store) {
     const next = queue.shift();
     if (next) setTimeout(() => openModal(next), 120);
     else setBackButton(null);
+    // Dokunuşun bırakılma olayı tahtaya ulaşmasın diye girişi bir sonraki karede aç.
+    if (scene && !next) setTimeout(() => {
+      if (!current && scene) scene.input.enabled = true;
+    }, 0);
     refresh();
   }
 
@@ -141,9 +167,17 @@ export function createUI(store) {
     return els.size >= 2;
   }
 
+  // Dost canavarlar seviyeden bağımsız tek kart: herhangi bir seviyesi bulunduysa açılmıştır.
+  function palKnown(e) {
+    return Object.keys(store.s.discovered).some((k) => k.startsWith(`${e}-`) && !k.endsWith('*'));
+  }
+
   function albumCount() {
     let n = 0;
-    for (const e of ALBUM_ELS) for (const lv of albumLevels(e)) if (store.s.discovered[`${e}-${lv}`]) n++;
+    for (const e of ALBUM_ELS) {
+      if (isPal(e)) n += palKnown(e) ? 1 : 0;
+      else for (const lv of albumLevels(e)) if (store.s.discovered[`${e}-${lv}`]) n++;
+    }
     return n;
   }
 
@@ -161,13 +195,27 @@ export function createUI(store) {
     el.rateVal.textContent = `+${formatRate(store.goldRate())} ${t('goldPerSec')}`;
     el.albumVal.textContent = `${albumCount()}/${ALBUM_TOTAL}`;
     el.dailyBtn.classList.toggle('has-dot', store.dailyStatus().ready);
+    el.wheelBtn.classList.toggle('has-dot', store.wheelStatus().free);
+    el.questsBtn.classList.toggle('has-dot', store.questState().some((q) => !q.done && q.have >= q.n) || store.questBonusReady());
     const hint = hintText();
     if (el.hint.textContent !== hint) el.hint.textContent = hint;
     el.eggBtn.classList.toggle('is-empty', s.energy < CFG.eggCost);
     el.upBtn.classList.toggle('has-dot', store.canAffordUpgrade());
     if (current && current.update) current.update();
+    if (!scene || current || queue.length || scene.isDragging()) return;
     // Sunucudan hediye geldiyse (ve ekranda başka pencere yoksa) göster.
-    if (scene && !current && !queue.length && store.s.inbox && store.s.inbox.length) openGift(store.s.inbox[0]);
+    if (store.emptyCells().length) giftSnooze.clear();
+    const gift = (store.s.inbox || []).find((g) => !giftSnooze.has(g.id));
+    if (gift) {
+      openGift(gift);
+      return;
+    }
+    // Tahta kilitlendiyse kurtarma penceresi (her kilitlenmede bir kez).
+    const locked = store.isLocked();
+    if (locked && !lockShown) {
+      lockShown = true;
+      openLocked();
+    } else if (!locked) lockShown = false;
   }
 
   function toast(msg, ms = 2200) {
@@ -202,7 +250,8 @@ export function createUI(store) {
     } else if (res.error === 'full') {
       sfx.error();
       haptic('warning');
-      toast(t('boardFull'));
+      if (store.isLocked()) openLocked();
+      else toast(t('boardFull'));
     } else {
       sfx.egg();
       scene.spawn(res);
@@ -510,6 +559,15 @@ export function createUI(store) {
         const d = store.s.discovered;
         const known = Boolean(d[`${e}-${lv}`]);
         detail.innerHTML = '';
+        if (isPal(e)) {
+          const got = palKnown(e);
+          detail.append(
+            h('b', { text: got ? blobName(e, 1) : '???' }),
+            h('span', { class: 'meta', text: `${t(e)} · x${PAL_MULT}` }),
+            h('p', { text: got ? blobFlavor(e, 1) : t('albumHowPal', { n: PAL_NEED[e] }) }),
+          );
+          return;
+        }
         if (known) {
           detail.append(
             h('b', { text: blobName(e, lv) }),
@@ -535,6 +593,21 @@ export function createUI(store) {
 
       function cell(e, lv) {
         const d = store.s.discovered;
+        if (isPal(e)) {
+          const got = palKnown(e);
+          const btn = h('button', { type: 'button', class: `album-cell${got ? '' : ' locked'}`, 'aria-label': got ? blobName(e, 1) : t('albumLocked') }, [
+            albumImg(e, 1, false),
+            h('small', { text: got ? '♥' : `${PAL_NEED[e]}` }),
+          ]);
+          btn.addEventListener('click', () => {
+            sfx.tap();
+            cells.forEach((c) => c.classList.remove('sel'));
+            btn.classList.add('sel');
+            showDetail(e, 1);
+          });
+          cells.push(btn);
+          return btn;
+        }
         const known = Boolean(d[`${e}-${lv}`]);
         const shiny = Boolean(d[`${e}-${lv}*`]);
         const secret = isHybrid(e) && !known;
@@ -567,6 +640,9 @@ export function createUI(store) {
             const label = h('span', { style: `color:${ELEMENT_CSS[e]}` }, [document.createTextNode(knownHybrid(e) ? t(e) : '???'), h('small', { text: `${t(a)} + ${t(b)}` })]);
             pane.append(h('div', { class: 'album-row recipe-row' }, [label, grid]));
           }
+        } else if (albumTab === 'pals') {
+          pane.append(h('div', { class: 'album-grid three' }, PALS.map((e) => cell(e, 1))));
+          pane.append(h('p', { class: 'small-note', text: t('inviteBody', { n: CFG.referralMerges, c: CFG.giftCrystals }) }));
         } else {
           const e = albumTab;
           pane.append(h('div', { class: 'album-grid' }, albumLevels(e).map((lv) => cell(e, lv))));
@@ -574,8 +650,8 @@ export function createUI(store) {
         for (const b of tabs.children) b.setAttribute('aria-selected', String(b.dataset.tab === albumTab));
       }
 
-      for (const tab of [...ELEMENTS, 'secret']) {
-        const label = tab === 'secret' ? `✦ ${t('secretTab')}` : t(tab);
+      for (const tab of [...ELEMENTS, 'secret', 'pals']) {
+        const label = tab === 'secret' ? `✦ ${t('secretTab')}` : tab === 'pals' ? `♥ ${t('palsTab')}` : t(tab);
         const b = h('button', { type: 'button', role: 'tab', text: label, 'data-tab': tab });
         if (tab !== 'secret') b.style.color = ELEMENT_CSS[tab];
         b.addEventListener('click', () => {
@@ -609,6 +685,418 @@ export function createUI(store) {
     haptic('light');
     openAlbum();
   });
+
+  // ---- Canavar kartı: dokununca açılır (sat / Sihirli İksir) ----
+  function blobInfo(cell) {
+    const b = store.s.board[cell];
+    // İlk birleştirmeden önce kart açılmasın: yeni oyuncu yanlışlıkla canavarını satmasın.
+    if (!b || current || store.s.stats.merges === 0) return;
+    openModal((close) => {
+      const img = h('img', { class: 'blob-img', src: `./assets/blobs/${artKey(b.el, b.lv)}.svg`, alt: '' });
+      if (b.shiny) makeGold(img);
+      const value = store.sellValue(cell);
+      const sellBtn = h('button', { type: 'button', class: 'btn btn-sell' });
+      const paintSell = () => {
+        sellBtn.classList.remove('sure');
+        sellBtn.innerHTML = `<span></span>${COIN_SVG}`;
+        sellBtn.querySelector('span').textContent = t('sellFor', { n: formatNum(value) });
+      };
+      paintSell();
+      let sure = false;
+      let sureTimer = null;
+      sellBtn.addEventListener('click', () => {
+        // Değerli canavarlar yanlışlıkla satılmasın: ikinci dokunuşta satılır.
+        const precious = b.lv >= 4 || b.shiny || isPal(b.el) || isHybrid(b.el);
+        if (precious && !sure) {
+          sure = true;
+          haptic('warning');
+          sellBtn.classList.add('sure');
+          sellBtn.textContent = t('sellSure');
+          clearTimeout(sureTimer);
+          sureTimer = setTimeout(() => {
+            sure = false;
+            paintSell();
+          }, 2500);
+          return;
+        }
+        clearTimeout(sureTimer);
+        const res = store.sell(cell);
+        close();
+        if (res.error) return;
+        sfx.coin();
+        haptic('medium');
+        if (scene) scene.removeAt(cell);
+        toast(t('sold', { n: formatNum(res.gold) }));
+        refresh();
+      });
+
+      const potionBtn = h('button', { type: 'button', class: 'btn' });
+      const paintPotion = () => {
+        if (store.s.potions > 0) {
+          potionBtn.className = 'btn btn-primary';
+          potionBtn.innerHTML = `${potionSvg(20)}<span></span>`;
+          potionBtn.querySelector('span').textContent = t('potionUse', { n: store.s.potions });
+          potionBtn.disabled = false;
+        } else {
+          const left = store.adPotionLeft();
+          potionBtn.className = 'btn btn-ad';
+          potionBtn.innerHTML = `${PLAY_SVG}<span></span>${potionSvg(18)}`;
+          potionBtn.querySelector('span').textContent = left > 0 ? t('potionAd') : t('potionNone');
+          potionBtn.disabled = left <= 0;
+        }
+      };
+      paintPotion();
+      potionBtn.addEventListener('click', async () => {
+        if (store.s.potions > 0) {
+          const res = store.usePotion(cell);
+          close();
+          if (res.error) return;
+          sfx.unlock();
+          haptic('success');
+          if (scene) scene.replaceAt(cell, res.blob);
+          if (res.discovered || res.shinyNew) setTimeout(() => discover(res.blob, { isNew: res.discovered, shinyNew: res.shinyNew }), 450);
+          refresh();
+          return;
+        }
+        potionBtn.disabled = true;
+        const r = await showRewarded('potion');
+        if (!r.ok) {
+          adFailed(r);
+          paintPotion();
+          return;
+        }
+        const res = store.adPotion();
+        if (res.error) {
+          fail(t('potionNone'));
+        } else {
+          sfx.energy();
+          haptic('success');
+          toast(r.test ? `${t('potionGot')} (test)` : t('potionGot'));
+        }
+        paintPotion();
+      });
+
+      return h('div', { class: 'modal-card blob-card', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'blob-title' }, [
+        img,
+        h('h2', { id: 'blob-title', text: blobName(b.el, b.lv) }),
+        h('div', { class: 'meta', text: `Lv${b.lv} · ${t(b.el)}${b.shiny ? ' · ✦' : ''}` }),
+        h('div', { class: 'rate-line', text: `+${formatRate(store.blobRate(cell))} ${t('goldPerSec')}` }),
+        h('p', { class: 'small-note', text: t('potionDesc') }),
+        potionBtn,
+        sellBtn,
+        h('button', { type: 'button', class: 'btn btn-ghost', text: t('close'), onclick: close }),
+      ]);
+    });
+  }
+
+  // ---- Tahta kilitlenince kurtarma ----
+  function openLocked() {
+    openModal((close) => {
+      const adBtn = h('button', { type: 'button', class: 'btn btn-ad', html: `${PLAY_SVG}<span></span>${potionSvg(18)}` });
+      adBtn.querySelector('span').textContent = t('potionAd');
+      adBtn.disabled = store.adPotionLeft() <= 0;
+      adBtn.addEventListener('click', async () => {
+        adBtn.disabled = true;
+        const r = await showRewarded('potion');
+        if (!r.ok) {
+          adFailed(r);
+          adBtn.disabled = false;
+          return;
+        }
+        const res = store.adPotion();
+        close();
+        if (res.error) {
+          fail(t('potionNone'));
+          return;
+        }
+        sfx.energy();
+        haptic('success');
+        toast(r.test ? `${t('potionGot')} (test)` : t('potionGot'), 3200);
+      });
+      return h('div', { class: 'modal-card', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'lock-title' }, [
+        h('div', { class: 'energy-big', html: potionSvg(40), style: 'background:#2f2457' }),
+        h('h2', { id: 'lock-title', text: t('lockedTitle') }),
+        h('p', { text: t('lockedBody') }),
+        store.s.potions > 0 ? h('p', { class: 'small-note', text: t('lockedHasPotion', { n: store.s.potions }), style: 'color:#C7B3FF' }) : null,
+        store.adPotionLeft() > 0 ? adBtn : null,
+        h('button', { type: 'button', class: 'btn btn-primary', text: t('ok'), onclick: close }),
+      ]);
+    });
+  }
+
+  // ---- Şans çarkı ----
+  let wheelRot = 0;
+  const ICONS = {
+    coin: '<circle cx="12" cy="12" r="9" fill="#FFC93C" stroke="#1A1430" stroke-width="2"/><circle cx="12" cy="12" r="5" fill="none" stroke="#C98A00" stroke-width="2"/>',
+    crystal: '<path d="M12 2l8 7-8 13-8-13z" fill="#FF6FB5" stroke="#1A1430" stroke-width="1.8" stroke-linejoin="round"/>',
+    energy: '<path d="M13 2L4 14h7l-1 8 9-12h-7z" fill="#4FD1E8" stroke="#1A1430" stroke-width="1.8" stroke-linejoin="round"/>',
+    potion: '<path d="M9 2.5h6M10 2.5v5L5.2 16a4.6 4.6 0 0 0 4 6.5h5.6a4.6 4.6 0 0 0 4-6.5L14 7.5v-5" fill="#B49BFF" stroke="#1A1430" stroke-width="1.8" stroke-linejoin="round"/>',
+  };
+
+  function wheelIcon(p) {
+    const ic = (name) => `<svg x="-13" y="-27" width="26" height="26" viewBox="0 0 24 24">${ICONS[name]}</svg>`;
+    const label = (txt) => `<text y="15" text-anchor="middle" font-family="Fredoka, Nunito, sans-serif" font-weight="700" font-size="15" fill="#1A1430">${txt}</text>`;
+    if (p.goldSec) return ic('coin') + label(`${Math.round(p.goldSec / 60)}${t('minShort')}`);
+    if (p.crystals) return ic('crystal') + label(p.crystals);
+    if (p.energy) return ic('energy') + label(p.energy);
+    if (p.potion) return ic('potion') + label(`x${p.potion}`);
+    return '<image href="./assets/egg-rare.svg" x="-19" y="-24" width="38" height="38"/>';
+  }
+
+  function wheelSvg() {
+    const n = CFG.wheel.length;
+    const seg = 360 / n;
+    const R = 118;
+    const c = 125;
+    const colors = ['#FF8FC0', '#8FE0FF', '#FFE08A', '#A6E86B'];
+    let paths = '';
+    let icons = '';
+    CFG.wheel.forEach((p, i) => {
+      const mid = -90 + i * seg;
+      const a0 = ((mid - seg / 2) * Math.PI) / 180;
+      const a1 = ((mid + seg / 2) * Math.PI) / 180;
+      const p0 = `${(c + R * Math.cos(a0)).toFixed(1)} ${(c + R * Math.sin(a0)).toFixed(1)}`;
+      const p1 = `${(c + R * Math.cos(a1)).toFixed(1)} ${(c + R * Math.sin(a1)).toFixed(1)}`;
+      paths += `<path d="M${c} ${c}L${p0}A${R} ${R} 0 0 1 ${p1}Z" fill="${colors[i % colors.length]}" stroke="#1A1430" stroke-width="3" stroke-linejoin="round"/>`;
+      const r2 = R * 0.66;
+      const mx = (c + r2 * Math.cos((mid * Math.PI) / 180)).toFixed(1);
+      const my = (c + r2 * Math.sin((mid * Math.PI) / 180)).toFixed(1);
+      icons += `<g transform="translate(${mx} ${my}) rotate(${mid + 90})">${wheelIcon(p)}</g>`;
+    });
+    return `<svg viewBox="0 0 250 250" aria-hidden="true"><circle cx="125" cy="125" r="123" fill="#1A1430"/>${paths}${icons}</svg>`;
+  }
+
+  function prizeText(res) {
+    const parts = [];
+    if (res.gold) parts.push(t('prizeGold', { n: formatNum(res.gold) }));
+    if (res.crystals) parts.push(t('prizeCrystals', { n: res.crystals }));
+    if (res.energy) parts.push(t('prizeEnergy', { n: res.energy }));
+    if (res.potion) parts.push(t('prizePotion'));
+    if (res.blob) parts.push(t('prizeEgg'));
+    return parts.join(', ');
+  }
+
+  function openWheel() {
+    openModal((close) => {
+      const rot = h('div', { class: 'wheel-rot', html: wheelSvg() });
+      rot.style.transform = `rotate(${wheelRot}deg)`;
+      const wrap = h('div', { class: 'wheel-wrap' }, [h('div', { class: 'wheel-pin' }), rot, h('div', { class: 'wheel-hub' })]);
+      const btn = h('button', { type: 'button', class: 'btn btn-primary' });
+      const sub = h('p', { class: 'small-note' });
+      let spinning = false;
+
+      function paint() {
+        const st = store.wheelStatus();
+        if (st.free) {
+          btn.className = 'btn btn-primary';
+          btn.textContent = t('wheelFree');
+          btn.disabled = spinning;
+          sub.textContent = t('wheelAdsLeft', { n: st.adsLeft });
+        } else if (st.adsLeft > 0) {
+          btn.className = 'btn btn-ad';
+          btn.innerHTML = `${PLAY_SVG}<span></span>`;
+          btn.querySelector('span').textContent = t('wheelAd');
+          btn.disabled = spinning;
+          sub.textContent = t('wheelAdsLeft', { n: st.adsLeft });
+        } else {
+          btn.className = 'btn btn-ghost';
+          btn.textContent = t('wheelNone');
+          btn.disabled = true;
+          sub.textContent = '';
+        }
+      }
+
+      btn.addEventListener('click', async () => {
+        if (spinning) return;
+        const st = store.wheelStatus();
+        let viaAd = false;
+        spinning = true;
+        paint();
+        if (!st.free) {
+          if (st.adsLeft <= 0) {
+            spinning = false;
+            paint();
+            return;
+          }
+          const r = await showRewarded('wheel');
+          if (!r.ok) {
+            spinning = false;
+            adFailed(r);
+            paint();
+            return;
+          }
+          viaAd = true;
+        }
+        const res = store.spin(undefined, viaAd);
+        if (res.error) {
+          spinning = false;
+          paint();
+          return;
+        }
+        // Çark, kazanılan dilim üstteki oka gelecek şekilde döner.
+        const seg = 360 / CFG.wheel.length;
+        const target = (360 - res.slot * seg) % 360;
+        const cur = ((wheelRot % 360) + 360) % 360;
+        wheelRot += 360 * 5 + ((target - cur + 360) % 360);
+        rot.style.transform = `rotate(${wheelRot}deg)`;
+        let k = 0;
+        const ticks = setInterval(() => {
+          sfx.tap();
+          if (++k > 18) clearInterval(ticks);
+        }, 150);
+        const dur = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches ? 450 : 3500;
+        setTimeout(() => {
+          clearInterval(ticks);
+          spinning = false;
+          sfx.coins();
+          haptic('success');
+          toast(t('wheelWin', { p: prizeText(res) }), 2800);
+          if (res.blob && scene) scene.spawn({ cell: res.cell, blob: res.blob, discovered: res.discovered, shinyNew: res.shinyNew });
+          refresh();
+          paint();
+        }, dur);
+      });
+      paint();
+      return h('div', { class: 'modal-card', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'wheel-title' }, [
+        h('h2', { id: 'wheel-title', text: t('wheelTitle') }),
+        wrap,
+        btn,
+        sub,
+        h('button', { type: 'button', class: 'btn btn-ghost', text: t('close'), onclick: close }),
+      ]);
+    });
+  }
+
+  // ---- Günlük görevler ----
+  function openQuests() {
+    openModal((close) => {
+      const list = h('div', { style: 'width:100%;display:flex;flex-direction:column;gap:8px' });
+      const resetNote = h('p', { class: 'small-note' });
+      let lastKey = '';
+
+      function claimBtn(onClick, reward) {
+        const b = h('button', { type: 'button', class: 'btn-buy', html: `<span>${t('questClaim')}</span>` });
+        if (reward) b.insertAdjacentHTML('beforeend', reward);
+        b.addEventListener('click', onClick);
+        return b;
+      }
+
+      function paint() {
+        const qs = store.questState();
+        const q = store.s.quests;
+        const bonusDone = Boolean(q && q.day === utcDay(clockNow()) && q.bonus);
+        const bonusReady = store.questBonusReady();
+        resetNote.textContent = t('questsReset', { t: formatClock(msToUtcMidnight(clockNow())) });
+        const key = JSON.stringify([qs, bonusDone, bonusReady, getLang()]);
+        if (key === lastKey) return;
+        lastKey = key;
+        list.innerHTML = '';
+        for (const x of qs) {
+          let right;
+          if (x.done) right = h('span', { class: 'q-check', text: '✓' });
+          else if (x.have >= x.n) {
+            right = claimBtn(() => {
+              const res = store.claimQuest(x.i);
+              if (res.error) return;
+              sfx.coins();
+              haptic('success');
+              toast(t('crystalsAdded', { n: res.crystals }));
+              refresh();
+              paint();
+            }, crystalSvg(16));
+          } else right = h('span', { class: 'q-reward', html: `+${x.r}${crystalSvg(16)}` });
+          list.append(
+            h('div', { class: `quest${x.done ? ' done' : ''}` }, [
+              h('div', { class: 'q-text' }, [
+                h('b', { text: t(`q_${x.k}`, { n: x.n }) }),
+                h('div', { class: 'q-bar' }, [h('i', { style: `width:${Math.round((x.have / x.n) * 100)}%` })]),
+                h('small', { class: 'small-note', text: `${x.have}/${x.n}` }),
+              ]),
+              right,
+            ]),
+          );
+        }
+        let bonusRight;
+        if (bonusDone) bonusRight = h('span', { class: 'q-check', text: '✓' });
+        else if (bonusReady) {
+          bonusRight = claimBtn(() => {
+            const res = store.claimQuestBonus();
+            if (res.error) return;
+            sfx.coins();
+            haptic('success');
+            toast(t('potionGot'), 3000);
+            refresh();
+            paint();
+          });
+        } else bonusRight = h('span', { class: 'q-reward', html: potionSvg(20) });
+        list.append(h('div', { class: `quest quest-bonus${bonusDone ? ' done' : ''}` }, [h('div', { class: 'q-text' }, [h('b', { text: t('questBonus', { n: CFG.questBonusCrystals }) })]), bonusRight]));
+      }
+      paint();
+      const card = h('div', { class: 'modal-card', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'q-title' }, [
+        h('h2', { id: 'q-title', text: t('questsTitle') }),
+        list,
+        resetNote,
+        h('button', { type: 'button', class: 'btn btn-ghost', text: t('close'), onclick: close }),
+      ]);
+      card.update = paint;
+      return card;
+    });
+  }
+
+  // ---- Haftalık sıralama ----
+  function openTop() {
+    openModal((close) => {
+      const body = h('div', { class: 'top-list' }, [h('p', { class: 'small-note', text: t('topLoading') })]);
+      const meLine = h('div', { class: 'album-meta' });
+      const reset = h('p', { class: 'small-note' });
+      const upd = () => {
+        reset.textContent = t('topReset', { t: formatClock(msToMonday(clockNow())) });
+      };
+      upd();
+      const show = (r) => {
+        body.innerHTML = '';
+        if (!r.ok) {
+          body.append(h('p', { class: 'small-note', text: r.reason === 'disabled' ? t('topOnlyTg') : t('topError') }));
+          return;
+        }
+        if (!r.top.length) body.append(h('p', { class: 'small-note', text: t('topEmpty') }));
+        for (const row of r.top) {
+          body.append(
+            h('div', { class: `top-row r${row.rank}${row.me ? ' me' : ''}` }, [
+              h('span', { class: 'rk', text: String(row.rank) }),
+              h('span', { class: 'nm', text: row.me ? `${row.name} (${t('topYou')})` : row.name }),
+              h('span', { class: 'gd', text: formatNum(row.earned) }),
+            ]),
+          );
+        }
+        if (r.me) meLine.textContent = t('topRank', { n: r.me.rank });
+      };
+      if (net) net.top().then(show);
+      else show({ ok: false, reason: 'disabled' });
+      const card = h('div', { class: 'modal-card', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'top-title' }, [
+        h('h2', { id: 'top-title', text: t('topTitle') }),
+        h('p', { class: 'small-note', text: t('topSub') }),
+        meLine,
+        body,
+        reset,
+        h('button', { type: 'button', class: 'btn btn-ghost', text: t('close'), onclick: close }),
+      ]);
+      card.update = upd;
+      return card;
+    });
+  }
+
+  for (const [btn, open] of [
+    [el.questsBtn, () => openQuests()],
+    [el.wheelBtn, () => openWheel()],
+    [el.topBtn, () => openTop()],
+  ]) {
+    btn.addEventListener('click', () => {
+      sfx.tap();
+      haptic('light');
+      open();
+    });
+  }
 
   // ---- Ayarlar ----
   function switchRow(label, key, onChange) {
@@ -672,6 +1160,7 @@ export function createUI(store) {
       if (blob.shiny) makeGold(img);
       let tag = h('span', { class: 'tag', text: t('newDiscovery') });
       if (recipe) tag = h('span', { class: 'tag recipe', text: t('secretRecipe') });
+      else if (isPal(blob.el)) tag = h('span', { class: 'tag', text: `♥ ${t('palTag')}` });
       else if (shinyOnly || blob.shiny) tag = h('span', { class: 'tag shiny', text: `✦ ${t('shinyTag')}` });
       const meta = recipe ? `Lv${blob.lv} · ${t(blob.el)} · ${t('recipeMeta', { a: t(opts.parents[0]), b: t(opts.parents[1]) })}` : `Lv${blob.lv} · ${t(blob.el)}`;
       return h('div', { class: 'modal-card discover', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'disc-title' }, [
@@ -743,6 +1232,15 @@ export function createUI(store) {
         h('h2', { id: 'inv-title', text: t('inviteTitle') }),
         h('p', { text: t('inviteBody', { n: CFG.referralMerges, c: CFG.giftCrystals }) }),
         h('div', { class: 'album-meta', text: t('inviteCount', { n: store.s.stats.friends || 0 }) }),
+        h('b', { text: t('invitePalsTitle'), style: 'font-size:14px' }),
+        h('div', { class: 'pal-row' }, PALS.map((e) => {
+          const got = palKnown(e);
+          const tile = h('div', { class: `pal-tile ${got ? 'got' : 'locked'}` }, [
+            h('img', { src: `./assets/blobs/${artKey(e, 1)}.svg`, alt: '' }),
+            h('span', { text: got ? blobName(e, 1) : t('invitePalNeed', { n: PAL_NEED[e] }) }),
+          ]);
+          return tile;
+        })),
         hasUser ? h('div', { class: 'invite-link', text: link }) : h('p', { class: 'small-note', text: t('inviteNoUser') }),
         share,
         copy,
@@ -766,6 +1264,12 @@ export function createUI(store) {
       const btn = h('button', { type: 'button', class: 'btn btn-primary', text: t('openGift') });
       btn.addEventListener('click', () => {
         const res = store.claimGift(gift.id);
+        if (res.error === 'full') {
+          giftSnooze.add(gift.id);
+          close();
+          fail(t('giftFull'));
+          return;
+        }
         close();
         if (res.error) return;
         sfx.coins();
@@ -835,6 +1339,7 @@ export function createUI(store) {
   return {
     attachScene(s) {
       scene = s;
+      if (current) scene.input.enabled = false;
       refresh();
     },
     refresh,
@@ -849,5 +1354,13 @@ export function createUI(store) {
     openAlbum,
     openSettings,
     openInvite,
+    openWheel,
+    openQuests,
+    openTop,
+    openLocked,
+    blobInfo,
+    attachNet(n) {
+      net = n;
+    },
   };
 }

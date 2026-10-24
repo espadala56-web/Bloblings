@@ -77,9 +77,23 @@ export function createSync(store, { post, enabled = true, hooks = {} } = {}) {
     }
   }
 
+  // Haftalık sıralama. Önce bekleyen hamleleri gönderir ki oyuncunun puanı güncel olsun.
+  async function top() {
+    if (!enabled) return { ok: false, reason: 'disabled' };
+    try {
+      if (online) await sync();
+      const { status, data } = await post('top', {}, { timeout: 8000 });
+      if (status !== 200 || !data || !Array.isArray(data.top)) return { ok: false, reason: (data && data.error) || status };
+      return { ok: true, ...data };
+    } catch (e) {
+      return { ok: false, reason: 'network' };
+    }
+  }
+
   return {
     load,
     sync,
+    top,
     get online() {
       return online;
     },

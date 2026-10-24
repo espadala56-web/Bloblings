@@ -7,13 +7,14 @@
 //   health -> çalışıyor mu kontrolü
 //   load   -> oyuncuyu getirir (yoksa oluşturur), sen yokken biriken altını hesaplar
 //   sync   -> telefondan gelen eylemleri ortak kurallarla tekrar oynatır, sonucu kaydeder
+//   top    -> haftalık sıralama (ilk 50 ve oyuncunun kendi sırası)
 //
 // Kurallar web/src altındaki dosyaların kopyasıdır (rules/). Güncellemek için:
 //   scripts/sync-rules.sh
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { replay, loadOnServer, newPlayerState } from './rules/sync.js';
-import { newSeed } from './rules/store.js';
+import { newSeed, weekId } from './rules/store.js';
 import { CFG } from './rules/config.js';
 
 const BOT_ID = Deno.env.get('BOT_ID') ?? '8884399679';
@@ -300,6 +301,11 @@ Deno.serve(async (req: Request) => {
     if (body.op === 'load') {
       const out = await load(auth.user, auth.startParam);
       return json(out, out.error ? 409 : 200);
+    }
+    if (body.op === 'top') {
+      const { data, error } = await db.rpc('weekly_top', { wk: weekId(Date.now()), me: auth.user.id });
+      if (error) throw error;
+      return json({ week: weekId(Date.now()), ...(data ?? {}) });
     }
     if (body.op === 'sync') {
       const out = (await sync(auth.user, body.actions, body.clientNow)) as Record<string, unknown>;

@@ -94,6 +94,12 @@ Sonra tarayıcıda `http://localhost:8080` aç. Telegram dışında da çalış�
 - [x] Arkadaş daveti: gelen arkadaşa nadir yumurta, 10 birleştirme yapınca davet edene nadir yumurta + 20 kristal
 - [x] AdsGram ödüllü reklam (Enerji: 55668, 2x Kazanç: 55669)
 - [ ] Reklam ödülünü sunucuda doğrulama (AdsGram Reward URL, günde 50 bin+ oyuncuda açılıyor)
+- [x] Canavar kartı: dokununca sat ya da Sihirli İksir ile 1 seviye yükselt
+- [x] Tahta kilitlenince kurtarma (reklamla iksir, günde 5)
+- [x] Şans çarkı: günde 1 bedava + 5 reklamlı çevirme (sonuç sunucuda doğrulanır)
+- [x] Günlük görevler: her gün 3 görev, hepsi bitince iksir
+- [x] Arkadaşa özel canavarlar: 1., 3. ve 5. arkadaşta Dostcuk, Yıldız Dost, Gökkuşağı Ruhu
+- [x] Haftalık sıralama (bu hafta üretilen altın, pazartesi sıfırlanır)
 - [ ] Telegram Stars mağazası ve Kâşif Pası
 - [ ] Görevler ve bildirimler
 

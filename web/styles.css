@@ -98,7 +98,7 @@ html, body {
 #game { width: 100%; aspect-ratio: 1 / 1; max-height: 100%; }
 #game canvas { touch-action: none; display: block; }
 
-.hint { margin: 10px 16px 0; min-height: 36px; font-size: 13px; font-weight: 700; color: var(--muted); text-align: center; line-height: 1.4; }
+.hint { margin: 8px 16px 0; min-height: 34px; font-size: 13px; font-weight: 700; color: var(--muted); text-align: center; line-height: 1.4; }
 
 .actions { display: flex; gap: 10px; padding: 8px 16px 0; margin-top: auto; }
 
@@ -389,3 +389,63 @@ html, body {
   .pill { min-width: 0; }
   .pill b { white-space: nowrap; }
 }
+
+/* Alt araç çubuğu: görevler, çark, sıralama, albüm */
+.toolbar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 6px 16px 0; }
+.tool { position: relative; height: 50px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; background: var(--panel); border: 1px solid var(--edge); border-radius: 14px; color: var(--text); font: 800 11px var(--font-body); cursor: pointer; padding: 0; }
+.tool:focus-visible { outline: 3px solid var(--cyan); outline-offset: 2px; }
+.tool:active { transform: translateY(1px); }
+.tool .dot { position: absolute; top: -4px; right: -4px; width: 14px; height: 14px; border-radius: 50%; background: var(--pink); border: 2px solid var(--ink); display: none; }
+.tool.has-dot .dot { display: block; }
+@media (prefers-reduced-motion: no-preference) {
+  .tool.has-dot svg { animation: nudge 1.6s ease-in-out infinite; }
+}
+@media (max-width: 380px) {
+  .toolbar { padding: 6px 12px 0; gap: 6px; }
+  .tool { height: 46px; }
+}
+
+/* Canavar kartı */
+.blob-card { gap: 8px; }
+.blob-card .blob-img { width: 120px; height: 120px; }
+.blob-card .meta { font-family: var(--font-display); font-weight: 600; font-size: 14px; color: var(--muted); }
+.blob-card .rate-line { font-family: var(--font-display); font-weight: 700; font-size: 18px; color: var(--gold); }
+.btn-sell { background: transparent; color: var(--gold); border: 2px solid #6a5a2a; font-size: 16px; min-height: 48px; }
+.btn-sell.sure { background: #5a2a2a; border-color: #ff6b6b; color: #ffd0d0; }
+.potion-count { font: 800 13px var(--font-body); color: #c7b3ff; }
+
+/* Şans çarkı */
+.wheel-wrap { position: relative; width: 250px; height: 250px; margin: 4px auto 0; }
+.wheel-rot { width: 100%; height: 100%; transition: transform 3.4s cubic-bezier(0.12, 0.8, 0.18, 1); }
+@media (prefers-reduced-motion: reduce) { .wheel-rot { transition-duration: 0.4s; } }
+.wheel-rot > svg { width: 100%; height: 100%; display: block; }
+.wheel-pin { position: absolute; left: 50%; top: -6px; transform: translateX(-50%); width: 0; height: 0; border-left: 14px solid transparent; border-right: 14px solid transparent; border-top: 26px solid var(--text); filter: drop-shadow(0 2px 0 var(--ink)); z-index: 2; }
+.wheel-hub { position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; background: var(--ink); border: 4px solid var(--gold); z-index: 2; }
+
+/* Görevler */
+.quest { width: 100%; display: flex; align-items: center; gap: 10px; background: var(--bg); border-radius: 16px; padding: 10px 12px; text-align: left; }
+.quest .q-text { flex: 1; display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.quest .q-text b { font-size: 14px; }
+.q-bar { height: 8px; border-radius: 999px; background: #3a3366; overflow: hidden; }
+.q-bar i { display: block; height: 100%; background: var(--cyan); border-radius: 999px; }
+.quest .q-reward { display: flex; align-items: center; gap: 3px; font: 700 14px var(--font-display); color: #ffb3d9; }
+.quest.done { opacity: 0.55; }
+.quest .q-check { color: #3fbf7f; font-weight: 900; font-size: 20px; width: 64px; text-align: center; }
+.quest .btn-buy { min-width: 64px; }
+.quest-bonus { border: 2px dashed #4a4285; background: transparent; }
+
+/* Sıralama */
+.top-list { width: 100%; display: flex; flex-direction: column; gap: 4px; max-height: 46vh; overflow-y: auto; }
+.top-row { display: flex; align-items: center; gap: 10px; background: var(--bg); border-radius: 12px; padding: 8px 12px; font-weight: 800; font-size: 14px; }
+.top-row .rk { width: 28px; text-align: center; font-family: var(--font-display); font-size: 16px; color: var(--muted); }
+.top-row .nm { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.top-row .gd { font-family: var(--font-display); color: var(--gold); }
+.top-row.me { background: #3a2f17; box-shadow: inset 0 0 0 2px var(--gold); }
+.top-row.r1 .rk { color: #ffc93c; } .top-row.r2 .rk { color: #d6dbe6; } .top-row.r3 .rk { color: #e0955a; }
+
+/* Davet penceresi: dost canavarlar */
+.pal-row { width: 100%; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.pal-tile { background: var(--bg); border-radius: 14px; padding: 6px 4px; display: flex; flex-direction: column; align-items: center; gap: 2px; font: 800 11px var(--font-body); color: var(--muted); }
+.pal-tile img { width: 54px; height: 54px; }
+.pal-tile.locked img { filter: brightness(0) invert(0.22); }
+.pal-tile.got { box-shadow: inset 0 0 0 2px var(--pink); color: var(--text); }
